@@ -11,8 +11,8 @@ LedgerFlow uses a double-entry ledger. All monetary values are stored in signed 
 
 ## Models and relationships
 
-- `Wallet` represents a single-currency customer balance container. It has exactly one wallet-type `LedgerAccount` once provisioned.
-- `LedgerAccount` holds the cached balance for a wallet or represents a system account. The seeded `SYSTEM_FUNDING_CLEARING_KES` account is the counterparty for simulated opening funds.
+- `Wallet` represents an NGN balance container for a simulated owner reference. It has exactly one wallet-type `LedgerAccount` once provisioned.
+- `LedgerAccount` holds the cached balance for a wallet or represents a system account. The seeded `SYSTEM_FUNDING_CLEARING_NGN` account is the counterparty for simulated development opening funds; the Phase 1B KES system account remains available for historical compatibility.
 - `LedgerTransaction` is the journal header. It owns two or more `LedgerEntry` postings and can point to the original journal when it is a reversal.
 - `LedgerEntry` is a signed posting to one ledger account. Entries belonging to a posted journal must sum to zero and use the journal currency.
 - `Transfer` links source and destination wallets to its journal and optional idempotency record.

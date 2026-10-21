@@ -28,6 +28,7 @@ async function bootstrap(): Promise<void> {
     .setDescription('LedgerFlow backend API documentation')
     .setVersion('1.0')
     .addTag('health')
+    .addTag('wallets')
     .build();
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('docs', app, document);

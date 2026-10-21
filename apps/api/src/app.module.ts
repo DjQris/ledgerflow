@@ -4,7 +4,9 @@ import { resolve } from 'node:path';
 
 import { validateEnvironment } from './config/environment';
 import { HealthModule } from './health/health.module';
+import { LedgerModule } from './ledger/ledger.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { WalletsModule } from './wallets/wallets.module';
 
 @Module({
   imports: [
@@ -19,6 +21,8 @@ import { PrismaModule } from './prisma/prisma.module';
     }),
     PrismaModule,
     HealthModule,
+    LedgerModule,
+    WalletsModule,
   ],
 })
 export class AppModule {}
