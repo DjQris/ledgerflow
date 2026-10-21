@@ -4,6 +4,7 @@ node_modules/
 # Build and test output
 dist/
 coverage/
+apps/api/src/generated/prisma/
 
 # Local environment files
 .env

@@ -1,14 +1,13 @@
 # LedgerFlow
 
-LedgerFlow is an npm-workspace monorepo. Phase 1A provides the NestJS API scaffold; `apps/web` is reserved for a future Next.js application and is not scaffolded yet.
+LedgerFlow is an npm-workspace monorepo. It currently provides a NestJS API and a PostgreSQL/Prisma persistence layer; `apps/web` is reserved for a future Next.js application and is not scaffolded yet.
 
 ## Prerequisites
 
 - Node.js 24 LTS (Node.js 22 or newer is supported)
 - npm 10 or newer
 - Git
-
-PostgreSQL and Docker Compose configuration will be added in Phase 1B. They are not required for this phase.
+- Docker with Docker Compose
 
 ## Installation
 
@@ -17,9 +16,14 @@ git clone <repository-url> ledgerflow
 cd ledgerflow
 cp .env.example .env
 npm install
+npm run db:up
+npm run db:migrate
+npm run db:generate
 ```
 
 The defaults in `.env.example` are safe for local development. Keep real secrets in `.env`; local environment files are ignored by Git.
+
+`db:up` starts PostgreSQL 18 on `127.0.0.1:5432`, backed by a persistent Docker volume. Confirm it is healthy with `docker compose ps`.
 
 ## Start the API
 
@@ -47,9 +51,19 @@ npm run lint
 npm run format:check
 npm test
 npm run test:cov
+npm run db:validate
+npm run db:status
 ```
 
 Run `npm run format` to apply Prettier formatting.
+
+Database changes must be committed as Prisma migrations. Create a development migration with:
+
+```bash
+npm run db:migrate -- --name describe_the_change
+```
+
+Use `npm run db:migrate:deploy` to apply committed migrations in non-development environments. Do not use `prisma db push` as a replacement for migrations. Stop the local database with `npm run db:down`; its named volume is retained.
 
 ## Project structure
 
@@ -58,8 +72,12 @@ ledgerflow/
 ├── apps/
 │   ├── api/       # NestJS modular-monolith backend
 │   └── web/       # Reserved for the future Next.js application
+├── docs/           # Architecture and data-model documentation
+├── compose.yaml    # Loopback-only local PostgreSQL
 ├── .env.example
 └── package.json   # Workspace scripts
 ```
 
-The API currently contains only application configuration, shared HTTP exception handling, and the health module. Database access, wallets, transaction services, authentication, Redis, and frontend features are intentionally outside Phase 1A.
+The API includes application configuration, shared HTTP exception handling, the health module, and a global Prisma module. The financial schema and its source-of-truth and immutability rules are documented in [docs/financial-data-model.md](docs/financial-data-model.md).
+
+Wallet and transaction API business logic, authentication, Redis, real-money integrations, and frontend features remain outside the current phase.

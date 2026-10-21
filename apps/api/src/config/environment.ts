@@ -3,6 +3,7 @@ const NODE_ENVIRONMENTS = ['development', 'test', 'production'] as const;
 export type NodeEnvironment = (typeof NODE_ENVIRONMENTS)[number];
 
 export interface EnvironmentVariables {
+  DATABASE_URL: string;
   NODE_ENV: NodeEnvironment;
   PORT: number;
   SERVICE_NAME: string;
@@ -12,6 +13,7 @@ export function validateEnvironment(
   values: Record<string, unknown>,
 ): EnvironmentVariables {
   const nodeEnvironment = values.NODE_ENV ?? 'development';
+  const databaseUrl = values.DATABASE_URL;
   const rawPort = values.PORT ?? 3000;
   const serviceName = values.SERVICE_NAME ?? 'ledgerflow-api';
 
@@ -20,6 +22,23 @@ export function validateEnvironment(
     !NODE_ENVIRONMENTS.includes(nodeEnvironment as NodeEnvironment)
   ) {
     throw new Error(`NODE_ENV must be one of: ${NODE_ENVIRONMENTS.join(', ')}`);
+  }
+
+  if (typeof databaseUrl !== 'string' || databaseUrl.trim().length === 0) {
+    throw new Error('DATABASE_URL must be a non-empty PostgreSQL URL');
+  }
+
+  let parsedDatabaseUrl: URL;
+  try {
+    parsedDatabaseUrl = new URL(databaseUrl);
+  } catch {
+    throw new Error('DATABASE_URL must be a valid PostgreSQL URL');
+  }
+
+  if (!['postgres:', 'postgresql:'].includes(parsedDatabaseUrl.protocol)) {
+    throw new Error(
+      'DATABASE_URL must use the postgres or postgresql protocol',
+    );
   }
 
   const port = typeof rawPort === 'number' ? rawPort : Number(rawPort);
@@ -32,6 +51,7 @@ export function validateEnvironment(
   }
 
   return {
+    DATABASE_URL: databaseUrl,
     NODE_ENV: nodeEnvironment as NodeEnvironment,
     PORT: port,
     SERVICE_NAME: serviceName.trim(),

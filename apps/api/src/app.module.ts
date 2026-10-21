@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 
 import { validateEnvironment } from './config/environment';
 import { HealthModule } from './health/health.module';
+import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { HealthModule } from './health/health.module';
       isGlobal: true,
       validate: validateEnvironment,
     }),
+    PrismaModule,
     HealthModule,
   ],
 })
