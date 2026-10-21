@@ -1,0 +1,26 @@
+{
+  "name": "ledgerflow",
+  "version": "0.1.0",
+  "private": true,
+  "description": "LedgerFlow monorepo",
+  "workspaces": [
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.0.0"
+  },
+  "scripts": {
+    "build": "npm run build --workspace @ledgerflow/api",
+    "format": "npm run format --workspace @ledgerflow/api",
+    "format:check": "npm run format:check --workspace @ledgerflow/api",
+    "lint": "npm run lint --workspace @ledgerflow/api",
+    "start": "npm run start --workspace @ledgerflow/api",
+    "start:dev": "npm run start:dev --workspace @ledgerflow/api",
+    "start:prod": "npm run start:prod --workspace @ledgerflow/api",
+    "test": "npm run test --workspace @ledgerflow/api",
+    "test:cov": "npm run test:cov --workspace @ledgerflow/api",
+    "test:watch": "npm run test:watch --workspace @ledgerflow/api",
+    "typecheck": "npm run typecheck --workspace @ledgerflow/api"
+  }
+}
