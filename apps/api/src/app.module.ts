@@ -6,6 +6,7 @@ import { validateEnvironment } from './config/environment';
 import { HealthModule } from './health/health.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { TransfersModule } from './transfers/transfers.module';
 import { WalletsModule } from './wallets/wallets.module';
 
 @Module({
@@ -23,6 +24,7 @@ import { WalletsModule } from './wallets/wallets.module';
     HealthModule,
     LedgerModule,
     WalletsModule,
+    TransfersModule,
   ],
 })
 export class AppModule {}

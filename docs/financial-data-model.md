@@ -23,6 +23,8 @@ LedgerFlow uses a double-entry ledger. All monetary values are stored in signed 
 
 `LedgerEntry` rows in posted `LedgerTransaction` journals are the financial source of truth. `LedgerAccount.cachedBalanceMinor` is a cache derived by a database trigger when a journal becomes posted; it must not be treated as an independent financial fact.
 
+Application and direct SQL updates to `cachedBalanceMinor` are rejected by a database trigger. Only the nested journal-posting trigger may change this projection. Wallet transfers lock both participating wallet/account rows in deterministic UUID order, recheck the source balance under lock, and create the transfer, journal, postings, projection updates, and completion state in one database transaction.
+
 Posted journals and their entries are immutable. Corrections require a new zero-sum reversal journal linked through `reversalOfId`. Audit events are always immutable. Wallets, transfers, idempotency records, pending journals, and cached account balances are operational records and may change according to their lifecycle.
 
 Database triggers reject unbalanced, single-entry, or cross-currency journals when they are posted. They also prevent inserting, updating, or deleting entries in a posted journal.

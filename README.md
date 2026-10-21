@@ -64,12 +64,15 @@ npm run typecheck
 npm run lint
 npm run format:check
 npm test
+npm run test:integration
 npm run test:cov
 npm run db:validate
 npm run db:status
 ```
 
 Run `npm run format` to apply Prettier formatting.
+
+The transfer integration suite requires `INTEGRATION_DATABASE_URL` to reference a dedicated database named `ledgerflow_phase1d_integration_*` with the committed migrations applied. This safeguard prevents the suite from writing test records to the development database.
 
 Database changes must be committed as Prisma migrations. Create a development migration with:
 
@@ -93,5 +96,7 @@ ledgerflow/
 ```
 
 The API includes application configuration, shared HTTP exception handling, health, wallet management, an internal ledger service, and a global Prisma module. The financial schema and its source-of-truth and immutability rules are documented in [docs/financial-data-model.md](docs/financial-data-model.md).
+
+The internal transfer engine uses deterministic PostgreSQL row locks and one interactive transaction for every financial write. It is intentionally not exposed through an HTTP controller; the public endpoint and idempotency layer remain future work.
 
 Authentication, Redis, real-money integrations, public funding operations, and frontend features remain outside the current phase.

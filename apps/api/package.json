@@ -24,6 +24,7 @@
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main.js",
     "test": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --runInBand",
+    "test:integration": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --runInBand --testRegex='.*\\.integration-spec\\.ts$'",
     "test:cov": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --coverage --runInBand",
     "test:watch": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --watch",
     "typecheck": "tsc --noEmit -p tsconfig.json"
@@ -78,6 +79,7 @@
     "collectCoverageFrom": [
       "**/*.(t|j)s",
       "!**/*.spec.ts",
+      "!**/*.integration-spec.ts",
       "!main.ts"
     ],
     "coverageDirectory": "../coverage",

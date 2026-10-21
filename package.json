@@ -29,6 +29,7 @@
     "start:dev": "npm run start:dev --workspace @ledgerflow/api",
     "start:prod": "npm run start:prod --workspace @ledgerflow/api",
     "test": "npm run test --workspace @ledgerflow/api",
+    "test:integration": "npm run test:integration --workspace @ledgerflow/api",
     "test:cov": "npm run test:cov --workspace @ledgerflow/api",
     "test:watch": "npm run test:watch --workspace @ledgerflow/api",
     "typecheck": "npm run typecheck --workspace @ledgerflow/api"
