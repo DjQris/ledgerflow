@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-import { EnvironmentVariables } from '../config/environment';
+import { EnvironmentVariables } from '../../config/environment';
 
 @Injectable()
 export class LocalSimulationGuard implements CanActivate {
@@ -30,7 +30,7 @@ export class LocalSimulationGuard implements CanActivate {
       !isLoopback
     ) {
       throw new ForbiddenException(
-        'Transfer simulation is available only from local development',
+        'Simulation is available only from local development',
       );
     }
     return true;

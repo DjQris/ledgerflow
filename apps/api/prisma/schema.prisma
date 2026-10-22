@@ -57,6 +57,13 @@ enum IdempotencyStatus {
   @@map("idempotency_status")
 }
 
+enum AuditOutcome {
+  SUCCEEDED @map("succeeded")
+  REJECTED  @map("rejected")
+
+  @@map("audit_outcome")
+}
+
 model Wallet {
   id                   String         @id @default(uuid()) @db.Uuid
   ownerReference       String         @unique @map("owner_reference") @db.VarChar(100)
@@ -167,14 +174,15 @@ model IdempotencyRecord {
 }
 
 model AuditEvent {
-  id         String   @id @default(uuid()) @db.Uuid
-  entityType String   @map("entity_type") @db.VarChar(100)
-  entityId   String   @map("entity_id") @db.Uuid
-  action     String   @db.VarChar(100)
-  actorType  String?  @map("actor_type") @db.VarChar(100)
-  actorId    String?  @map("actor_id") @db.VarChar(255)
+  id         String       @id @default(uuid()) @db.Uuid
+  entityType String       @map("entity_type") @db.VarChar(100)
+  entityId   String       @map("entity_id") @db.Uuid
+  action     String       @db.VarChar(100)
+  outcome    AuditOutcome @default(SUCCEEDED)
+  actorType  String?      @map("actor_type") @db.VarChar(100)
+  actorId    String?      @map("actor_id") @db.VarChar(255)
   metadata   Json?
-  occurredAt DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+  occurredAt DateTime     @default(now()) @map("occurred_at") @db.Timestamptz(6)
 
   @@index([entityType, entityId, occurredAt])
   @@index([occurredAt])

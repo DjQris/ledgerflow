@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
+import { AuditService } from '../audit/audit.service';
 import { serializeMinorUnits } from '../common/money/minor-units';
 import { EnvironmentVariables } from '../config/environment';
 import {
@@ -25,6 +26,7 @@ export class LedgerService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService<EnvironmentVariables, true>,
+    private readonly audit: AuditService,
   ) {}
 
   async postDevelopmentOpeningFunding(
@@ -122,18 +124,16 @@ export class LedgerService {
         where: { id: journal.id },
       });
 
-      await transaction.auditEvent.create({
-        data: {
-          action: 'development_opening_funding_posted',
-          actorId: 'development-seed',
-          actorType: 'system',
-          entityId: wallet.id,
-          entityType: 'wallet',
-          metadata: {
-            amountMinor: serializeMinorUnits(input.amountMinor),
-            externalReference: input.externalReference,
-            journalId: journal.id,
-          },
+      await this.audit.recordSucceeded(transaction, {
+        action: 'development_opening_funding_posted',
+        actorId: 'development-seed',
+        actorType: 'system',
+        entityId: wallet.id,
+        entityType: 'wallet',
+        metadata: {
+          amountMinor: serializeMinorUnits(input.amountMinor),
+          externalReference: input.externalReference,
+          journalId: journal.id,
         },
       });
 

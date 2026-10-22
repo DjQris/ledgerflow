@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 
+import { AuditService } from '../audit/audit.service';
 import {
   LedgerAccountType,
   LedgerTransactionStatus,
@@ -26,7 +27,10 @@ const WALLET_WITH_ACCOUNT = {
 
 @Injectable()
 export class WalletsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   async create(input: CreateWalletDto): Promise<WalletResponseDto> {
     const walletId = randomUUID();
@@ -51,14 +55,12 @@ export class WalletsService {
           include: WALLET_WITH_ACCOUNT,
         });
 
-        await transaction.auditEvent.create({
-          data: {
-            action: 'created',
-            actorId: input.ownerReference,
-            actorType: 'simulated_owner',
-            entityId: createdWallet.id,
-            entityType: 'wallet',
-          },
+        await this.audit.recordSucceeded(transaction, {
+          action: 'wallet_created',
+          actorId: input.ownerReference,
+          actorType: 'simulated_owner',
+          entityId: createdWallet.id,
+          entityType: 'wallet',
         });
 
         return createdWallet;

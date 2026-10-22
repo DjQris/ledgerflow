@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { Server } from 'node:http';
 import request from 'supertest';
 
+import { AuditService } from '../audit/audit.service';
 import { ApiExceptionFilter } from '../common/filters/api-exception.filter';
 import { EnvironmentVariables } from '../config/environment';
 import {
@@ -15,13 +16,27 @@ import {
 import { LedgerService } from '../ledger/ledger.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { WalletsService } from '../wallets/wallets.service';
-import { LocalSimulationGuard } from './local-simulation.guard';
+import { LocalSimulationGuard } from '../common/guards/local-simulation.guard';
 import { TransferIdempotencyService } from './transfer-idempotency.service';
+import { TransferRejectionAuditInterceptor } from './transfer-rejection-audit.interceptor';
 import { TransferResult } from './dto/transfer-result.dto';
 import { TransfersController } from './transfers.controller';
 import { TransfersService } from './transfers.service';
 
 jest.setTimeout(40_000);
+
+const concurrencyRounds = Number(process.env.CONCURRENCY_ROUNDS ?? '1');
+if (
+  !Number.isInteger(concurrencyRounds) ||
+  concurrencyRounds < 1 ||
+  concurrencyRounds > 50
+) {
+  throw new Error('CONCURRENCY_ROUNDS must be an integer between 1 and 50');
+}
+const rounds = Array.from(
+  { length: concurrencyRounds },
+  (_, index) => index + 1,
+);
 
 const FAILURE_FUNCTION = 'phase1e_raise_transfer_failure';
 const FAILURE_TRIGGER = 'phase1e_deliberate_transfer_failure';
@@ -38,9 +53,9 @@ describe('Transfer HTTP idempotency PostgreSQL integration', () => {
     const databaseUrl = process.env.INTEGRATION_DATABASE_URL;
     if (!databaseUrl) throw new Error('INTEGRATION_DATABASE_URL is required');
     const name = new URL(databaseUrl).pathname.replace(/^\//, '');
-    if (!name.startsWith('ledgerflow_phase1d_integration_')) {
+    if (!name.startsWith('ledgerflow_phase1f_integration_')) {
       throw new Error(
-        'The HTTP suite requires a dedicated ledgerflow_phase1d_integration_* database',
+        'The HTTP suite requires a dedicated ledgerflow_phase1f_integration_* database',
       );
     }
     config = {
@@ -63,8 +78,10 @@ describe('Transfer HTTP idempotency PostgreSQL integration', () => {
       providers: [
         { provide: ConfigService, useValue: config },
         PrismaService,
+        AuditService,
         TransfersService,
         TransferIdempotencyService,
+        TransferRejectionAuditInterceptor,
         LocalSimulationGuard,
       ],
     }).compile();
@@ -81,8 +98,9 @@ describe('Transfer HTTP idempotency PostgreSQL integration', () => {
     app.useGlobalFilters(new ApiExceptionFilter(app.get(HttpAdapterHost)));
     await app.init();
     prisma = app.get(PrismaService);
-    wallets = new WalletsService(prisma);
-    ledger = new LedgerService(prisma, config);
+    const audit = app.get(AuditService);
+    wallets = new WalletsService(prisma, audit);
+    ledger = new LedgerService(prisma, config, audit);
   }
 
   async function createWallet(label: string) {
@@ -171,28 +189,31 @@ describe('Transfer HTTP idempotency PostgreSQL integration', () => {
     ).toBe(0n);
   });
 
-  it('coordinates simultaneous identical requests through the unique database row', async () => {
-    const source = await createWallet('race-source');
-    const destination = await createWallet('race-dest');
-    await fund(source.wallet.id, 1_000n);
-    const before = await counts();
-    const body = command(source.wallet.id, destination.wallet.id, '700');
-    const key = randomUUID();
+  it.each(rounds)(
+    'coordinates simultaneous identical requests through the unique database row (round %i)',
+    async () => {
+      const source = await createWallet('race-source');
+      const destination = await createWallet('race-dest');
+      await fund(source.wallet.id, 1_000n);
+      const before = await counts();
+      const body = command(source.wallet.id, destination.wallet.id, '700');
+      const key = randomUUID();
 
-    const [first, second] = await Promise.all([
-      post(source.actor, key, body),
-      post(source.actor, key, body),
-    ]);
-    expect(first.status).toBe(201);
-    expect(second.status).toBe(201);
-    expect(second.body).toEqual(first.body);
-    expect(await counts()).toEqual({
-      transfers: before.transfers + 1,
-      journals: before.journals + 1,
-      entries: before.entries + 2,
-      keys: before.keys + 1,
-    });
-  });
+      const [first, second] = await Promise.all([
+        post(source.actor, key, body),
+        post(source.actor, key, body),
+      ]);
+      expect(first.status).toBe(201);
+      expect(second.status).toBe(201);
+      expect(second.body).toEqual(first.body);
+      expect(await counts()).toEqual({
+        transfers: before.transfers + 1,
+        journals: before.journals + 1,
+        entries: before.entries + 2,
+        keys: before.keys + 1,
+      });
+    },
+  );
 
   it('rejects a changed amount on the same actor and key', async () => {
     const source = await createWallet('changed-source');
@@ -248,38 +269,41 @@ describe('Transfer HTTP idempotency PostgreSQL integration', () => {
     });
   });
 
-  it('allows at most one of two concurrent debits with different keys', async () => {
-    const source = await createWallet('overspend-source');
-    const firstDestination = await createWallet('overspend-first');
-    const secondDestination = await createWallet('overspend-second');
-    await fund(source.wallet.id, 5_000_000n);
-    const before = await counts();
+  it.each(rounds)(
+    'allows at most one of two concurrent debits with different keys (round %i)',
+    async () => {
+      const source = await createWallet('overspend-source');
+      const firstDestination = await createWallet('overspend-first');
+      const secondDestination = await createWallet('overspend-second');
+      await fund(source.wallet.id, 5_000_000n);
+      const before = await counts();
 
-    const responses = await Promise.all([
-      post(
-        source.actor,
-        randomUUID(),
-        command(source.wallet.id, firstDestination.wallet.id, '4000000'),
-      ),
-      post(
-        source.actor,
-        randomUUID(),
-        command(source.wallet.id, secondDestination.wallet.id, '4000000'),
-      ),
-    ]);
-    expect(responses.map((response) => response.status).sort()).toEqual([
-      201, 409,
-    ]);
-    const after = await counts();
-    expect(after.transfers).toBe(before.transfers + 1);
-    expect(after.journals).toBe(before.journals + 1);
-    expect(after.entries).toBe(before.entries + 2);
-    expect(after.keys).toBe(before.keys + 1);
-    const account = await prisma.ledgerAccount.findUniqueOrThrow({
-      where: { walletId: source.wallet.id },
-    });
-    expect(account.cachedBalanceMinor).toBe(1_000_000n);
-  });
+      const responses = await Promise.all([
+        post(
+          source.actor,
+          randomUUID(),
+          command(source.wallet.id, firstDestination.wallet.id, '4000000'),
+        ),
+        post(
+          source.actor,
+          randomUUID(),
+          command(source.wallet.id, secondDestination.wallet.id, '4000000'),
+        ),
+      ]);
+      expect(responses.map((response) => response.status).sort()).toEqual([
+        201, 409,
+      ]);
+      const after = await counts();
+      expect(after.transfers).toBe(before.transfers + 1);
+      expect(after.journals).toBe(before.journals + 1);
+      expect(after.entries).toBe(before.entries + 2);
+      expect(after.keys).toBe(before.keys + 1);
+      const account = await prisma.ledgerAccount.findUniqueOrThrow({
+        where: { walletId: source.wallet.id },
+      });
+      expect(account.cachedBalanceMinor).toBe(1_000_000n);
+    },
+  );
 
   it('replays the saved response after an API restart', async () => {
     const source = await createWallet('restart-source');

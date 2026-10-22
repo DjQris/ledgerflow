@@ -30,6 +30,7 @@ async function bootstrap(): Promise<void> {
     .addTag('health')
     .addTag('wallets')
     .addTag('transfers')
+    .addTag('audit')
     .build();
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('docs', app, document);

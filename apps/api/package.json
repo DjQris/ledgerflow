@@ -17,6 +17,7 @@
     "db:seed": "npm run build && node dist/database/seed.js",
     "db:status": "prisma migrate status",
     "db:validate": "prisma validate",
+    "ledger:verify": "npm run build && node dist/database/verify-ledger.js",
     "format": "prettier --write \"src/**/*.ts\" \"prisma.config.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"prisma.config.ts\"",
     "lint": "eslint \"src/**/*.ts\" \"prisma.config.ts\" --max-warnings=0",
@@ -25,6 +26,7 @@
     "start:prod": "node dist/main.js",
     "test": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --runInBand",
     "test:integration": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --runInBand --testRegex='.*\\.integration-spec\\.ts$'",
+    "test:concurrency": "CONCURRENCY_ROUNDS=${CONCURRENCY_ROUNDS:-10} node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --runInBand --testRegex='transfers\\.http\\.integration-spec\\.ts$' --testNamePattern='coordinates simultaneous|concurrent debits'",
     "test:cov": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --coverage --runInBand",
     "test:watch": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --watch",
     "typecheck": "tsc --noEmit -p tsconfig.json"

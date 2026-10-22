@@ -3,6 +3,7 @@ import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 import { randomUUID } from 'node:crypto';
 
+import { AuditService } from '../audit/audit.service';
 import {
   parseMinorUnits,
   serializeMinorUnits,
@@ -46,7 +47,10 @@ export interface ValidatedTransferCommand {
 
 @Injectable()
 export class TransfersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   async execute(input: TransferCommand): Promise<TransferResult> {
     const command = this.prepare(input);
@@ -182,19 +186,17 @@ export class TransfersService {
       where: { id: transferId },
     });
 
-    await transaction.auditEvent.create({
-      data: {
-        action: 'completed',
-        actorId: actor,
-        actorType: actor ? 'simulated_owner' : 'internal_service',
-        entityId: transferId,
-        entityType: 'transfer',
-        metadata: {
-          amountMinor: serializeMinorUnits(command.amountMinor),
-          destinationWalletId: command.destinationWalletId,
-          journalId,
-          sourceWalletId: command.sourceWalletId,
-        },
+    await this.audit.recordSucceeded(transaction, {
+      action: 'transfer_completed',
+      actorId: actor,
+      actorType: actor ? 'simulated_owner' : 'internal_service',
+      entityId: transferId,
+      entityType: 'transfer',
+      metadata: {
+        amountMinor: serializeMinorUnits(command.amountMinor),
+        destinationWalletId: command.destinationWalletId,
+        journalId,
+        sourceWalletId: command.sourceWalletId,
       },
     });
 

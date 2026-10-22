@@ -17,7 +17,7 @@ LedgerFlow uses a double-entry ledger. All monetary values are stored in signed 
 - `LedgerEntry` is a signed posting to one ledger account. Entries belonging to a posted journal must sum to zero and use the journal currency.
 - `Transfer` links source and destination wallets to its journal and optional idempotency record.
 - `IdempotencyRecord` uniquely owns a `(scope, key)` pair and stores the request hash and replayable outcome.
-- `AuditEvent` is an append-only record of important entity activity.
+- `AuditEvent` is an append-only record of important entity activity with an explicit succeeded or rejected outcome. It stores a safe actor identifier, action, resource type and ID, timestamp, and limited metadata.
 
 ## Source of truth and immutability
 
@@ -27,6 +27,6 @@ Application and direct SQL updates to `cachedBalanceMinor` are rejected by a dat
 
 Phase 1E scopes each idempotency key to the simulated source owner and transfer operation. The request hash covers canonical wallet UUIDs and amount in minor units. The existing unique `(scope, key)` constraint coordinates concurrent inserts in PostgreSQL. The idempotency row, saved HTTP result, transfer, and journal commit together; failure rolls all of them back. Completed duplicate requests return the saved result without another ledger write.
 
-Posted journals and their entries are immutable. Corrections require a new zero-sum reversal journal linked through `reversalOfId`. Audit events are always immutable. Wallets, transfers, idempotency records, pending journals, and cached account balances are operational records and may change according to their lifecycle.
+Posted journals and their entries are immutable. Corrections require a new zero-sum reversal journal linked through `reversalOfId`. Audit event updates, deletes, and truncation are blocked by PostgreSQL triggers. Wallets, transfers, idempotency records, pending journals, and cached account balances are operational records and may change according to their lifecycle.
 
 Database triggers reject unbalanced, single-entry, or cross-currency journals when they are posted. They also prevent inserting, updating, or deleting entries in a posted journal.

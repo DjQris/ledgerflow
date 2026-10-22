@@ -10,6 +10,7 @@ import {
   NotFoundException,
   Post,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
@@ -24,6 +25,8 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 
+import { LocalSimulationGuard } from '../common/guards/local-simulation.guard';
+
 import { TransferCommand } from './dto/transfer.command';
 import {
   TransferInspectionDto,
@@ -31,8 +34,8 @@ import {
 } from './dto/transfer-http.dto';
 import { TransferResult } from './dto/transfer-result.dto';
 import { TransferError } from './errors/transfer.errors';
-import { LocalSimulationGuard } from './local-simulation.guard';
 import { TransferIdempotencyService } from './transfer-idempotency.service';
+import { TransferRejectionAuditInterceptor } from './transfer-rejection-audit.interceptor';
 
 @ApiTags('transfers')
 @ApiHeader({
@@ -50,6 +53,7 @@ export class TransfersController {
   constructor(private readonly idempotency: TransferIdempotencyService) {}
 
   @Post()
+  @UseInterceptors(TransferRejectionAuditInterceptor)
   @ApiOperation({ summary: 'Submit an idempotent local wallet transfer' })
   @ApiHeader({
     name: 'Idempotency-Key',

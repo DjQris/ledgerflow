@@ -1,9 +1,4 @@
-import {
-  BadRequestException,
-  ConflictException,
-  HttpException,
-  Injectable,
-} from '@nestjs/common';
+import { BadRequestException, HttpException, Injectable } from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
 
 import { Prisma } from '../generated/prisma/client';
@@ -13,6 +8,7 @@ import { TEST_OWNER_REFERENCE_PATTERN } from '../wallets/dto/create-wallet.dto';
 import { TransferCommand } from './dto/transfer.command';
 import { TransferInspectionDto } from './dto/transfer-http.dto';
 import { TransferResult } from './dto/transfer-result.dto';
+import { IdempotencyPayloadConflictError } from './errors/idempotency-payload-conflict.error';
 import {
   TransferConflictError,
   TransferError,
@@ -73,9 +69,7 @@ export class TransferIdempotencyService {
               throw new TransferConflictError();
             }
             if (existing.requestHash !== requestHash) {
-              throw new ConflictException(
-                'Idempotency-Key is already bound to a different transfer request',
-              );
+              throw new IdempotencyPayloadConflictError();
             }
             if (
               existing.status !== IdempotencyStatus.COMPLETED ||

@@ -1,3 +1,4 @@
+import { AuditService } from '../audit/audit.service';
 import { WalletStatus } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
 import { WalletsService } from './wallets.service';
@@ -29,7 +30,7 @@ describe('WalletsService', () => {
           operation(transaction),
       ),
     } as unknown as PrismaService;
-    const service = new WalletsService(prisma);
+    const service = new WalletsService(prisma, new AuditService(prisma));
 
     const result = await service.create({ ownerReference: 'test-alice' });
 
@@ -64,7 +65,7 @@ describe('WalletsService', () => {
           .mockResolvedValue(walletRecord(9_007_199_254_740_993n)),
       },
     } as unknown as PrismaService;
-    const service = new WalletsService(prisma);
+    const service = new WalletsService(prisma, new AuditService(prisma));
 
     const result = await service.findOne(WALLET_ID);
 

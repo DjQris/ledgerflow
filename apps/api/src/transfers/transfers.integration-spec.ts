@@ -1,6 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
 
+import { AuditService } from '../audit/audit.service';
 import { EnvironmentVariables } from '../config/environment';
 import {
   LedgerTransactionStatus,
@@ -35,9 +36,9 @@ describe('TransfersService PostgreSQL integration', () => {
     }
 
     const databaseName = new URL(databaseUrl).pathname.replace(/^\//, '');
-    if (!databaseName.startsWith('ledgerflow_phase1d_integration_')) {
+    if (!databaseName.startsWith('ledgerflow_phase1f_integration_')) {
       throw new Error(
-        'Integration tests require a dedicated ledgerflow_phase1d_integration_* database',
+        'Integration tests require a dedicated ledgerflow_phase1f_integration_* database',
       );
     }
 
@@ -51,9 +52,10 @@ describe('TransfersService PostgreSQL integration', () => {
 
     prisma = new PrismaService(config);
     await prisma.onModuleInit();
-    wallets = new WalletsService(prisma);
-    ledger = new LedgerService(prisma, config);
-    transfers = new TransfersService(prisma);
+    const audit = new AuditService(prisma);
+    wallets = new WalletsService(prisma, audit);
+    ledger = new LedgerService(prisma, config, audit);
+    transfers = new TransfersService(prisma, audit);
   });
 
   afterAll(async () => {

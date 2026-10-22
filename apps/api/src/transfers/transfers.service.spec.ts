@@ -1,3 +1,4 @@
+import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   InvalidTransferError,
@@ -13,9 +14,10 @@ describe('TransfersService command validation', () => {
     'rejects invalid amount %p before opening a transaction',
     async (amountMinor) => {
       const transactionMock = jest.fn();
-      const service = new TransfersService({
+      const prisma = {
         $transaction: transactionMock,
-      } as unknown as PrismaService);
+      } as unknown as PrismaService;
+      const service = new TransfersService(prisma, new AuditService(prisma));
 
       await expect(
         service.execute({
@@ -30,9 +32,10 @@ describe('TransfersService command validation', () => {
 
   it('rejects self-transfers before opening a transaction', async () => {
     const transactionMock = jest.fn();
-    const service = new TransfersService({
+    const prisma = {
       $transaction: transactionMock,
-    } as unknown as PrismaService);
+    } as unknown as PrismaService;
+    const service = new TransfersService(prisma, new AuditService(prisma));
 
     await expect(
       service.execute({

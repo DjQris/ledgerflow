@@ -1,6 +1,8 @@
 # LedgerFlow
 
-LedgerFlow is an npm-workspace monorepo. It currently provides a NestJS API and a PostgreSQL/Prisma persistence layer; `apps/web` is reserved for a future Next.js application and is not scaffolded yet.
+LedgerFlow is an npm-workspace monorepo containing a NestJS API and a PostgreSQL/Prisma ledger. `apps/web` is reserved for a future application and is not scaffolded. See the [architecture diagram](docs/architecture.md) and [financial data model](docs/financial-data-model.md).
+
+The stack is TypeScript, NestJS, PostgreSQL 18, Prisma, Jest, and Supertest. Swagger documents the HTTP API.
 
 ## Prerequisites
 
@@ -15,9 +17,9 @@ LedgerFlow is an npm-workspace monorepo. It currently provides a NestJS API and 
 git clone <repository-url> ledgerflow
 cd ledgerflow
 cp .env.example .env
-npm install
+npm ci
 npm run db:up
-npm run db:migrate
+npm run db:migrate:deploy
 npm run db:generate
 npm run db:seed
 ```
@@ -39,7 +41,7 @@ The development server exposes:
 - Health check: <http://localhost:3000/api/v1/health>
 - Swagger UI: <http://localhost:3000/docs>
 
-For a production-style local run:
+For a compiled local run:
 
 ```bash
 npm run build
@@ -66,6 +68,14 @@ Phase 1E exposes transfer simulation only to loopback clients while `NODE_ENV` i
 
 Reuse the same key and request to retrieve the original result, including after an API restart. Reusing a key with another amount or wallet returns HTTP 409. Different actors have separate key scopes. Failed transfers roll back their key reservation, so the same request can be retried. These endpoints use simulated ownership only; Phase 2 will introduce authentication.
 
+## Audit API and financial checks
+
+`GET /api/v1/audit-events?limit=50` returns up to 100 recent audit events. Like the transfer endpoints, it accepts only loopback requests in development or test mode. Events include a safe actor identifier, event type, related resource, outcome, timestamp, and limited metadata. The API provides no audit update or delete route, and PostgreSQL rejects updates, deletes, and truncation.
+
+Run `npm run ledger:verify` to check that every posted journal has at least two entries with a zero sum and matching currencies, and that wallet balance projections match their posted ledger entries. The command prints a JSON report and exits with code 1 if it finds discrepancies. It never changes balances.
+
+Swagger UI at `/docs` lists all REST routes, headers, request bodies, and response codes. Wallet creation returns 201, reads return 200, and transfer submission returns 201. Invalid requests return 400, missing wallets return 404, insufficient funds or idempotency conflicts return 409, and routes restricted to local development return 403.
+
 ## Quality commands
 
 ```bash
@@ -74,14 +84,27 @@ npm run lint
 npm run format:check
 npm test
 npm run test:integration
+npm run test:concurrency
 npm run test:cov
 npm run db:validate
 npm run db:status
+npm run ledger:verify
 ```
 
 Run `npm run format` to apply Prettier formatting.
 
-The transfer integration suites require `INTEGRATION_DATABASE_URL` to reference a dedicated database named `ledgerflow_phase1d_integration_*` with the committed migrations applied. This safeguard prevents the suites from writing test records to the development database.
+Integration and concurrency tests require `INTEGRATION_DATABASE_URL` to reference a dedicated database named `ledgerflow_phase1f_integration_*` with the committed migrations applied. For the default local PostgreSQL container:
+
+```bash
+docker exec ledgerflow-database-1 createdb -U ledgerflow ledgerflow_phase1f_integration_local
+export INTEGRATION_DATABASE_URL='postgresql://ledgerflow:ledgerflow_dev_password@127.0.0.1:5432/ledgerflow_phase1f_integration_local?schema=public'
+DATABASE_URL="$INTEGRATION_DATABASE_URL" npm run db:migrate:deploy
+npm run test:integration
+npm run test:concurrency
+DATABASE_URL="$INTEGRATION_DATABASE_URL" npm run ledger:verify
+```
+
+The concurrency harness runs ten rounds each of identical-key requests and competing debits. Set `CONCURRENCY_ROUNDS=20 npm run test:concurrency` to run a different number between 1 and 50. The database name guard prevents tests from writing to the primary development database. These tests create disposable records; use a fresh integration database for a clean run.
 
 Database changes must be committed as Prisma migrations. Create a development migration with:
 
@@ -108,4 +131,6 @@ The API includes application configuration, shared HTTP exception handling, heal
 
 The transfer engine uses deterministic PostgreSQL row locks and one interactive transaction for every financial write. The Phase 1E API reserves a database unique `(scope, key)` row and completes that row and the transfer in the same transaction. Concurrent duplicate requests wait for the first transaction and replay its saved result; no in-memory lock or cache is used.
 
-Authentication, Redis, real-money integrations, public funding operations, and frontend features remain outside the current phase.
+Phase 1F records successful operations atomically with their financial writes and records rejected transfers separately. `AuditEvent` rows are append-only. The integrity command provides an independent check of posted journal and wallet projection invariants.
+
+Current limits: actors are simulated, transfers and audit inspection work only locally, funding is seed-only, and inspection endpoints return at most 100 rows. There are no real payment rails, authentication, frontend, or deployment features. Before Phase 2, introduce identity and authorization, decide audit retention and idempotency expiry policies, and load-test the transaction path under expected traffic.

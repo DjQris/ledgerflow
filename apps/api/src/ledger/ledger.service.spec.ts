@@ -1,5 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 
+import { AuditService } from '../audit/audit.service';
 import { EnvironmentVariables } from '../config/environment';
 import {
   LedgerTransactionStatus,
@@ -36,7 +37,11 @@ describe('LedgerService', () => {
     const productionConfig = {
       get: jest.fn().mockReturnValue('production'),
     } as unknown as ConfigService<EnvironmentVariables, true>;
-    const service = new LedgerService(prisma, productionConfig);
+    const service = new LedgerService(
+      prisma,
+      productionConfig,
+      new AuditService(prisma),
+    );
 
     await expect(
       service.postDevelopmentOpeningFunding({
@@ -82,7 +87,11 @@ describe('LedgerService', () => {
           operation(transaction),
       ),
     } as unknown as PrismaService;
-    const service = new LedgerService(prisma, developmentConfig());
+    const service = new LedgerService(
+      prisma,
+      developmentConfig(),
+      new AuditService(prisma),
+    );
 
     await service.postDevelopmentOpeningFunding({
       amountMinor: 500_000n,
@@ -149,7 +158,11 @@ describe('LedgerService', () => {
           operation(transaction),
       ),
     } as unknown as PrismaService;
-    const service = new LedgerService(prisma, developmentConfig());
+    const service = new LedgerService(
+      prisma,
+      developmentConfig(),
+      new AuditService(prisma),
+    );
 
     const result = await service.postDevelopmentOpeningFunding({
       amountMinor: 500_000n,
