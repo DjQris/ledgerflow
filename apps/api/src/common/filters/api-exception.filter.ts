@@ -6,6 +6,8 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
+import { Request } from 'express';
+import { sanitizedPath } from '../http-security';
 
 interface ApiErrorResponse {
   statusCode: number;
@@ -33,15 +35,31 @@ export class ApiExceptionFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): void {
     const { httpAdapter } = this.httpAdapterHost;
     const context = host.switchToHttp();
-    const request = context.getRequest<unknown>();
+    const request = context.getRequest<Request>();
 
+    const tooLarge =
+      isRecord(exception) && exception.type === 'entity.too.large';
+    const parseFailure =
+      isRecord(exception) && exception.type === 'entity.parse.failed';
     const status =
       exception instanceof HttpException
         ? exception.getStatus()
-        : HttpStatus.INTERNAL_SERVER_ERROR;
+        : tooLarge
+          ? HttpStatus.PAYLOAD_TOO_LARGE
+          : parseFailure
+            ? HttpStatus.BAD_REQUEST
+            : HttpStatus.INTERNAL_SERVER_ERROR;
 
     let message: string | string[] = 'Internal server error';
     let error = 'Internal Server Error';
+
+    if (tooLarge) {
+      message = 'Request body too large';
+      error = 'Payload Too Large';
+    } else if (parseFailure) {
+      message = 'Invalid JSON body';
+      error = 'Bad Request';
+    }
 
     if (exception instanceof HttpException) {
       const exceptionResponse = exception.getResponse();
@@ -64,13 +82,12 @@ export class ApiExceptionFilter implements ExceptionFilter {
       }
     }
 
-    const requestUrl: unknown = httpAdapter.getRequestUrl(request);
     const requestMethod: unknown = httpAdapter.getRequestMethod(request);
 
     const responseBody: ApiErrorResponse = {
       statusCode: status,
       timestamp: new Date().toISOString(),
-      path: typeof requestUrl === 'string' ? requestUrl : '',
+      path: sanitizedPath(request),
       method: typeof requestMethod === 'string' ? requestMethod : '',
       message,
       error,

@@ -22,9 +22,11 @@ import {
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiSecurity,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 
 import { Roles } from '../access-control/decorators/roles.decorator';
 import { PermissionPolicies } from '../access-control/permission-policies';
@@ -53,9 +55,11 @@ export class TransfersController {
   constructor(private readonly idempotency: TransferIdempotencyService) {}
 
   @Post()
+  @Throttle({ ip: { limit: 120, ttl: 60_000 } })
   @Roles(...PermissionPolicies.customerTransferCreate)
   @UseInterceptors(TransferRejectionAuditInterceptor)
   @ApiOperation({ summary: 'Transfer from an owned wallet' })
+  @ApiSecurity('csrf-token')
   @ApiHeader({
     name: 'Idempotency-Key',
     required: true,

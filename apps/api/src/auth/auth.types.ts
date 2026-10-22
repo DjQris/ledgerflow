@@ -7,6 +7,10 @@ export interface AuthenticatedUser {
   status: UserStatus;
 }
 
+export interface AuthenticatedSessionUser extends AuthenticatedUser {
+  sessionId: string;
+}
+
 export interface IssuedTokens {
   accessToken: string;
   refreshToken: string;

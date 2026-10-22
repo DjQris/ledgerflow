@@ -3,7 +3,11 @@ import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
 
 import { AuditService } from '../audit/audit.service';
-import { AuthenticatedUser, IssuedTokens } from '../auth/auth.types';
+import {
+  AuthenticatedSessionUser,
+  AuthenticatedUser,
+  IssuedTokens,
+} from '../auth/auth.types';
 import { EnvironmentVariables } from '../config/environment';
 import { Prisma } from '../generated/prisma/client';
 import { UserStatus } from '../generated/prisma/enums';
@@ -73,7 +77,7 @@ export class SessionService {
 
   async authenticate(
     accessToken: string | undefined,
-  ): Promise<AuthenticatedUser> {
+  ): Promise<AuthenticatedSessionUser> {
     const claims = this.tokens.verifyAccessToken(accessToken);
     const session = await this.prisma.authSession.findUnique({
       include: { user: true },
@@ -88,7 +92,18 @@ export class SessionService {
     ) {
       throw new UnauthorizedException('Authentication required');
     }
-    return this.toAuthenticatedUser(session.user);
+    return { ...this.toAuthenticatedUser(session.user), sessionId: session.id };
+  }
+
+  async findRefreshSessionId(
+    rawRefreshToken: string | undefined,
+  ): Promise<string | undefined> {
+    if (!this.tokens.isRefreshToken(rawRefreshToken)) return undefined;
+    const record = await this.prisma.refreshToken.findUnique({
+      select: { sessionId: true },
+      where: { tokenHash: this.tokens.hashRefreshToken(rawRefreshToken) },
+    });
+    return record?.sessionId;
   }
 
   async rotate(rawRefreshToken: string | undefined): Promise<IssuedTokens> {

@@ -14,6 +14,7 @@ import { AuthenticatedUser } from '../auth.types';
 
 export interface AuthenticatedRequest extends Request {
   authenticatedUser?: AuthenticatedUser;
+  authenticatedSessionId?: string;
 }
 
 @Injectable()
@@ -37,7 +38,9 @@ export class AuthenticationGuard implements CanActivate {
     const accessToken = this.cookies.readAccess(request);
     if (!accessToken)
       throw new UnauthorizedException('Authentication required');
-    request.authenticatedUser = await this.sessions.authenticate(accessToken);
+    const user = await this.sessions.authenticate(accessToken);
+    request.authenticatedUser = user;
+    request.authenticatedSessionId = user.sessionId;
     return true;
   }
 }

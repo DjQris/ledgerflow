@@ -11,6 +11,8 @@ export interface EnvironmentVariables {
   AUTH_ISSUER: string;
   AUTH_REFRESH_TOKEN_TTL_SECONDS: number;
   AUTH_SIGNING_KEY: string | null;
+  CORS_ALLOWED_ORIGINS: string[];
+  REQUEST_BODY_LIMIT_BYTES: number;
   DATABASE_URL: string;
   NODE_ENV: NodeEnvironment;
   PORT: number;
@@ -88,6 +90,36 @@ export function validateEnvironment(
   ) {
     throw new Error('AUTH_ALLOWED_ORIGIN must be an exact allowed origin');
   }
+  const rawOrigins = values.CORS_ALLOWED_ORIGINS ?? allowedOrigin.origin;
+  if (typeof rawOrigins !== 'string') {
+    throw new Error(
+      'CORS_ALLOWED_ORIGINS must be a comma-separated origin list',
+    );
+  }
+  const corsOrigins = rawOrigins.split(',').map((item) => item.trim());
+  if (
+    corsOrigins.length === 0 ||
+    corsOrigins.some((item) => item.length === 0)
+  ) {
+    throw new Error('CORS_ALLOWED_ORIGINS must contain exact origins');
+  }
+  for (const origin of corsOrigins) {
+    let parsed: URL;
+    try {
+      parsed = new URL(origin);
+    } catch {
+      throw new Error('CORS_ALLOWED_ORIGINS must contain exact origins');
+    }
+    if (
+      parsed.origin !== origin ||
+      !['http:', 'https:'].includes(parsed.protocol) ||
+      (nodeEnvironment === 'production' && parsed.protocol !== 'https:')
+    ) {
+      throw new Error(
+        'CORS_ALLOWED_ORIGINS must contain exact trusted origins',
+      );
+    }
+  }
 
   const issuer = values.AUTH_ISSUER ?? 'ledgerflow-api';
   const audience = values.AUTH_AUDIENCE ?? 'ledgerflow-client';
@@ -104,6 +136,13 @@ export function validateEnvironment(
     60,
     3600,
     'AUTH_ACCESS_TOKEN_TTL_SECONDS',
+  );
+  const bodyLimit = readInteger(
+    values.REQUEST_BODY_LIMIT_BYTES,
+    16_384,
+    1024,
+    1_048_576,
+    'REQUEST_BODY_LIMIT_BYTES',
   );
   const refreshTtl = readInteger(
     values.AUTH_REFRESH_TOKEN_TTL_SECONDS,
@@ -146,6 +185,8 @@ export function validateEnvironment(
     AUTH_ISSUER: issuer.trim(),
     AUTH_REFRESH_TOKEN_TTL_SECONDS: refreshTtl,
     AUTH_SIGNING_KEY: normalizedSigningKey,
+    CORS_ALLOWED_ORIGINS: [...new Set(corsOrigins)],
+    REQUEST_BODY_LIMIT_BYTES: bodyLimit,
     DATABASE_URL: databaseUrl,
     NODE_ENV: nodeEnvironment as NodeEnvironment,
     PORT: port,

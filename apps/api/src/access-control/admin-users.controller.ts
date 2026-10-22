@@ -11,9 +11,11 @@ import {
   ApiForbiddenResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiSecurity,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 
 import type { AuthenticatedUser } from '../auth/auth.types';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -29,6 +31,7 @@ import { ChangeStatusDto } from './dto/change-status.dto';
 @ApiUnauthorizedResponse({ description: 'An active session is required.' })
 @ApiForbiddenResponse({ description: 'Administrator permission required.' })
 @Controller('admin/users')
+@Throttle({ ip: { limit: 60, ttl: 60_000 } })
 @Roles(...PermissionPolicies.userAdmin)
 export class AdminUsersController {
   constructor(private readonly users: AdminUsersService) {}
@@ -42,6 +45,7 @@ export class AdminUsersController {
 
   @Patch(':id/role')
   @ApiOperation({ summary: 'Assign a permitted user role' })
+  @ApiSecurity('csrf-token')
   @ApiOkResponse({ type: UserProfileDto })
   changeRole(
     @CurrentUser() actor: AuthenticatedUser,
@@ -53,6 +57,7 @@ export class AdminUsersController {
 
   @Patch(':id/status')
   @ApiOperation({ summary: 'Suspend or reactivate a user' })
+  @ApiSecurity('csrf-token')
   @ApiOkResponse({ type: UserProfileDto })
   changeStatus(
     @CurrentUser() actor: AuthenticatedUser,

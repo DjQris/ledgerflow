@@ -19,17 +19,22 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiServiceUnavailableResponse,
+  ApiSecurity,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
+import { Throttle } from '@nestjs/throttler';
 
 import { Public } from '../access-control/decorators/public.decorator';
 import { Roles } from '../access-control/decorators/roles.decorator';
 import { PermissionPolicies } from '../access-control/permission-policies';
 import { CookieService } from '../security/cookie.service';
+import { CsrfMode } from '../security/csrf-mode.decorator';
+import { CsrfService } from '../security/csrf.service';
 import { AuthService } from './auth.service';
 import type { AuthenticatedUser } from './auth.types';
+import type { AuthenticatedRequest } from './guards/authentication.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -46,10 +51,13 @@ export class AuthController {
   constructor(
     private readonly auth: AuthService,
     private readonly cookies: CookieService,
+    private readonly csrf: CsrfService,
   ) {}
 
   @Post('register')
+  @Throttle({ ip: { limit: 30, ttl: 60_000 } })
   @Public()
+  @CsrfMode('exempt')
   @UseGuards(AuthOriginGuard)
   @ApiOperation({ summary: 'Register a customer account' })
   @ApiCreatedResponse({ type: UserProfileDto })
@@ -61,7 +69,9 @@ export class AuthController {
   }
 
   @Post('login')
+  @Throttle({ ip: { limit: 30, ttl: 60_000 } })
   @Public()
+  @CsrfMode('exempt')
   @UseGuards(AuthOriginGuard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Create a session and set HTTP-only cookies' })
@@ -74,14 +84,21 @@ export class AuthController {
   ): Promise<UserProfileDto> {
     const result = await this.auth.login(input);
     this.cookies.set(response, result.tokens);
+    response.setHeader(
+      'X-CSRF-Token',
+      this.csrf.issueForAccess(result.tokens.accessToken),
+    );
     return result.profile;
   }
 
   @Post('refresh')
+  @Throttle({ ip: { limit: 60, ttl: 60_000 } })
   @Public()
+  @CsrfMode('refresh')
   @UseGuards(AuthOriginGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Rotate a refresh token and renew access' })
+  @ApiSecurity('csrf-token')
   @ApiNoContentResponse({ description: 'Fresh HTTP-only cookies set.' })
   @ApiUnauthorizedResponse({ description: 'Invalid or reused refresh token.' })
   @ApiForbiddenResponse({ description: 'Request origin is not allowed.' })
@@ -92,6 +109,10 @@ export class AuthController {
     try {
       const tokens = await this.auth.refresh(this.cookies.readRefresh(request));
       this.cookies.set(response, tokens);
+      response.setHeader(
+        'X-CSRF-Token',
+        this.csrf.issueForAccess(tokens.accessToken),
+      );
     } catch (error: unknown) {
       this.cookies.clear(response);
       throw error;
@@ -100,9 +121,11 @@ export class AuthController {
 
   @Post('logout')
   @Public()
+  @CsrfMode('logout')
   @UseGuards(AuthOriginGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Revoke the active session and clear cookies' })
+  @ApiSecurity('csrf-token')
   @ApiNoContentResponse()
   @ApiForbiddenResponse({ description: 'Request origin is not allowed.' })
   async logout(
@@ -128,5 +151,13 @@ export class AuthController {
   @ApiUnauthorizedResponse({ description: 'No active session.' })
   me(@CurrentUser() user: AuthenticatedUser): UserProfileDto {
     return UserProfileDto.fromUser(user);
+  }
+
+  @Get('csrf')
+  @Roles(...PermissionPolicies.identityRead)
+  @ApiCookieAuth('access-cookie')
+  @ApiOperation({ summary: 'Get a session-bound CSRF token' })
+  csrfToken(@Req() request: AuthenticatedRequest): { csrfToken: string } {
+    return { csrfToken: this.csrf.issue(request.authenticatedSessionId!) };
   }
 }

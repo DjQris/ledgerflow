@@ -35,7 +35,7 @@ export class TransferActorMismatchError extends TransferError {
   constructor() {
     super(
       'TRANSFER_ACTOR_MISMATCH',
-      'The source wallet does not belong to the simulated actor',
+      'The source wallet does not belong to the authenticated actor',
     );
   }
 }

@@ -19,6 +19,7 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiParam,
+  ApiSecurity,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
@@ -44,6 +45,7 @@ export class WalletsController {
   @Post()
   @Roles(...PermissionPolicies.customerWalletCreate)
   @ApiOperation({ summary: 'Create an NGN wallet for the signed-in customer' })
+  @ApiSecurity('csrf-token')
   @ApiBody({ schema: { type: 'object', additionalProperties: false } })
   @ApiCreatedResponse({ type: WalletResponseDto })
   @ApiBadRequestResponse({ description: 'The request body is invalid.' })
@@ -64,6 +66,7 @@ export class WalletsController {
   @ApiOperation({
     summary: 'Create a local-only provisional simulation wallet',
   })
+  @ApiSecurity('csrf-token')
   @ApiCreatedResponse({ type: WalletResponseDto })
   createSimulated(@Body() input: CreateWalletDto): Promise<WalletResponseDto> {
     return this.walletsService.create(input);

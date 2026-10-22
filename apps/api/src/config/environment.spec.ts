@@ -10,6 +10,8 @@ describe('authentication environment validation', () => {
     expect(config.AUTH_REFRESH_TOKEN_TTL_SECONDS).toBe(604800);
     expect(config.AUTH_BCRYPT_ROUNDS).toBe(12);
     expect(config.AUTH_SIGNING_KEY).toBeNull();
+    expect(config.CORS_ALLOWED_ORIGINS).toEqual(['http://localhost:3000']);
+    expect(config.REQUEST_BODY_LIMIT_BYTES).toBe(16_384);
   });
 
   it('requires a signing key, HTTPS origin, and secure cookies in production', () => {
@@ -70,5 +72,46 @@ describe('authentication environment validation', () => {
         DATABASE_URL: databaseUrl,
       }),
     ).toThrow('AUTH_COOKIE_SECURE');
+  });
+
+  it('requires exact trusted CORS origins and a bounded body limit', () => {
+    expect(() =>
+      validateEnvironment({
+        DATABASE_URL: databaseUrl,
+        CORS_ALLOWED_ORIGINS: 'https://app.example/path',
+      }),
+    ).toThrow('CORS_ALLOWED_ORIGINS');
+    expect(() =>
+      validateEnvironment({
+        DATABASE_URL: databaseUrl,
+        CORS_ALLOWED_ORIGINS: '*',
+      }),
+    ).toThrow('CORS_ALLOWED_ORIGINS');
+    expect(() =>
+      validateEnvironment({
+        DATABASE_URL: databaseUrl,
+        REQUEST_BODY_LIMIT_BYTES: 20_000_000,
+      }),
+    ).toThrow('REQUEST_BODY_LIMIT_BYTES');
+    expect(() =>
+      validateEnvironment({
+        DATABASE_URL: databaseUrl,
+        NODE_ENV: 'production',
+        AUTH_SIGNING_KEY: signingKey,
+        AUTH_ALLOWED_ORIGIN: 'https://app.example',
+        CORS_ALLOWED_ORIGINS: 'https://app.example,http://localhost:3000',
+      }),
+    ).toThrow('CORS_ALLOWED_ORIGINS');
+    const valid = validateEnvironment({
+      DATABASE_URL: databaseUrl,
+      NODE_ENV: 'production',
+      AUTH_SIGNING_KEY: signingKey,
+      AUTH_ALLOWED_ORIGIN: 'https://app.example',
+      CORS_ALLOWED_ORIGINS: 'https://app.example, https://admin.example',
+    });
+    expect(valid.CORS_ALLOWED_ORIGINS).toEqual([
+      'https://app.example',
+      'https://admin.example',
+    ]);
   });
 });

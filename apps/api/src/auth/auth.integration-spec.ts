@@ -3,12 +3,12 @@ import { HttpAdapterHost } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import * as bcrypt from 'bcrypt';
-import cookieParser from 'cookie-parser';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { Server } from 'node:http';
 import request from 'supertest';
 
 import { ApiExceptionFilter } from '../common/filters/api-exception.filter';
+import { configureHttpSecurity } from '../common/http-security';
 import { UserRole, UserStatus } from '../generated/prisma/enums';
 import { LedgerService } from '../ledger/ledger.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -46,9 +46,13 @@ describe('Phase 2B authentication PostgreSQL HTTP integration', () => {
     const module = await Test.createTestingModule({
       imports: [AppModule],
     }).compile();
-    app = module.createNestApplication();
+    app = module.createNestApplication({ bodyParser: false });
     app.setGlobalPrefix('api/v1');
-    app.use(cookieParser());
+    configureHttpSecurity(app, {
+      CORS_ALLOWED_ORIGINS: [origin],
+      NODE_ENV: 'test',
+      REQUEST_BODY_LIMIT_BYTES: 16_384,
+    });
     app.useGlobalPipes(
       new ValidationPipe({
         forbidNonWhitelisted: true,
@@ -87,6 +91,11 @@ describe('Phase 2B authentication PostgreSQL HTTP integration', () => {
     cookie(response, 'ledgerflow_access');
   const refreshCookie = (response: request.Response): string =>
     cookie(response, 'ledgerflow_refresh');
+  const csrfToken = (response: request.Response): string => {
+    const token: unknown = response.headers['x-csrf-token'];
+    if (typeof token !== 'string') throw new Error('Missing CSRF token');
+    return token;
+  };
   const profile = (response: request.Response) =>
     response.body as {
       email: string;
@@ -283,6 +292,7 @@ describe('Phase 2B authentication PostgreSQL HTTP integration', () => {
       .post('/api/v1/auth/refresh')
       .set('Origin', origin)
       .set('Cookie', refreshCookie(loggedIn))
+      .set('X-CSRF-Token', csrfToken(loggedIn))
       .expect(204);
     expect(refreshRaw(rotated)).not.toBe(firstRaw);
     const first = await prisma.refreshToken.findUniqueOrThrow({
@@ -305,6 +315,7 @@ describe('Phase 2B authentication PostgreSQL HTTP integration', () => {
       .post('/api/v1/auth/refresh')
       .set('Origin', origin)
       .set('Cookie', refreshCookie(loggedIn))
+      .set('X-CSRF-Token', csrfToken(loggedIn))
       .expect(401);
     expect(
       (reuse.headers['set-cookie'] as unknown as string[]).join(' '),
@@ -344,7 +355,8 @@ describe('Phase 2B authentication PostgreSQL HTTP integration', () => {
       request(server())
         .post('/api/v1/auth/refresh')
         .set('Origin', origin)
-        .set('Cookie', refreshCookie(loggedIn));
+        .set('Cookie', refreshCookie(loggedIn))
+        .set('X-CSRF-Token', csrfToken(loggedIn));
     const results = await Promise.all([pending(), pending()]);
     expect(results.map((result) => result.status).sort()).toEqual([204, 401]);
     const hash = createHash('sha256')
@@ -374,6 +386,7 @@ describe('Phase 2B authentication PostgreSQL HTTP integration', () => {
       .post('/api/v1/auth/logout')
       .set('Origin', origin)
       .set('Cookie', [accessCookie(loggedIn), refreshCookie(loggedIn)])
+      .set('X-CSRF-Token', csrfToken(loggedIn))
       .expect(204);
     expect(
       (result.headers['set-cookie'] as unknown as string[]).join(' '),
@@ -386,6 +399,7 @@ describe('Phase 2B authentication PostgreSQL HTTP integration', () => {
       .post('/api/v1/auth/refresh')
       .set('Origin', origin)
       .set('Cookie', refreshCookie(loggedIn))
+      .set('X-CSRF-Token', csrfToken(loggedIn))
       .expect(401);
     const hash = createHash('sha256')
       .update(refreshRaw(loggedIn))
@@ -427,11 +441,13 @@ describe('Phase 2B authentication PostgreSQL HTTP integration', () => {
     const firstWallet = await request(server())
       .post('/api/v1/wallets')
       .set('Cookie', accessCookie(a))
+      .set('X-CSRF-Token', csrfToken(a))
       .send({})
       .expect(201);
     const secondWallet = await request(server())
       .post('/api/v1/wallets')
       .set('Cookie', accessCookie(b))
+      .set('X-CSRF-Token', csrfToken(b))
       .send({})
       .expect(201);
     const aId = (firstWallet.body as { id: string }).id;
@@ -441,6 +457,7 @@ describe('Phase 2B authentication PostgreSQL HTTP integration', () => {
     await request(server())
       .post('/api/v1/wallets')
       .set('Cookie', accessCookie(a))
+      .set('X-CSRF-Token', csrfToken(a))
       .send({ ownerId: profile(b).id })
       .expect(400);
     const ownList = await request(server())
@@ -483,12 +500,14 @@ describe('Phase 2B authentication PostgreSQL HTTP integration', () => {
     await request(server())
       .post('/api/v1/transfers')
       .set('Cookie', accessCookie(b))
+      .set('X-CSRF-Token', csrfToken(b))
       .set('Idempotency-Key', randomUUID())
       .send(body)
       .expect(403);
     await request(server())
       .post('/api/v1/transfers')
       .set('Cookie', accessCookie(a))
+      .set('X-CSRF-Token', csrfToken(a))
       .set('Idempotency-Key', randomUUID())
       .set('X-Simulated-Actor', 'test-someone-else')
       .send(body)
@@ -497,6 +516,7 @@ describe('Phase 2B authentication PostgreSQL HTTP integration', () => {
       .post('/api/v1/transfers')
       .set('Cookie', accessCookie(a))
       .set('Origin', 'https://evil.example')
+      .set('X-CSRF-Token', csrfToken(a))
       .set('Idempotency-Key', randomUUID())
       .send(body)
       .expect(403);
@@ -560,11 +580,13 @@ describe('Phase 2B authentication PostgreSQL HTTP integration', () => {
     await request(server())
       .post('/api/v1/wallets')
       .set('Cookie', accessCookie(operations))
+      .set('X-CSRF-Token', csrfToken(operations))
       .send({})
       .expect(403);
     await request(server())
       .post('/api/v1/transfers')
       .set('Cookie', accessCookie(operations))
+      .set('X-CSRF-Token', csrfToken(operations))
       .set('Idempotency-Key', randomUUID())
       .send({})
       .expect(403);
@@ -579,12 +601,14 @@ describe('Phase 2B authentication PostgreSQL HTTP integration', () => {
     await request(server())
       .post('/api/v1/transfers')
       .set('Cookie', accessCookie(admin))
+      .set('X-CSRF-Token', csrfToken(admin))
       .set('Idempotency-Key', randomUUID())
       .send({})
       .expect(403);
     const simulatedWallet = await request(server())
       .post('/api/v1/wallets/simulated')
       .set('Cookie', accessCookie(admin))
+      .set('X-CSRF-Token', csrfToken(admin))
       .send({ ownerReference: `test-phase2c-${randomUUID()}` })
       .expect(201);
     const provisional = await prisma.wallet.findUniqueOrThrow({
@@ -595,11 +619,13 @@ describe('Phase 2B authentication PostgreSQL HTTP integration', () => {
     await request(server())
       .patch(`/api/v1/admin/users/${adminId}/role`)
       .set('Cookie', accessCookie(admin))
+      .set('X-CSRF-Token', csrfToken(admin))
       .send({ role: UserRole.CUSTOMER })
       .expect(403);
     await request(server())
       .patch(`/api/v1/admin/users/${customerId}/role`)
       .set('Cookie', accessCookie(admin))
+      .set('X-CSRF-Token', csrfToken(admin))
       .send({ role: UserRole.OPERATIONS })
       .expect(200);
     await request(server())
@@ -610,6 +636,7 @@ describe('Phase 2B authentication PostgreSQL HTTP integration', () => {
       .patch(`/api/v1/admin/users/${customerId}/role`)
       .set('Cookie', accessCookie(admin))
       .set('Origin', 'https://evil.example')
+      .set('X-CSRF-Token', csrfToken(admin))
       .send({ role: UserRole.ADMIN })
       .expect(403);
     expect(
@@ -620,6 +647,7 @@ describe('Phase 2B authentication PostgreSQL HTTP integration', () => {
     await request(server())
       .patch(`/api/v1/admin/users/${customerId}/status`)
       .set('Cookie', accessCookie(admin))
+      .set('X-CSRF-Token', csrfToken(admin))
       .send({ status: UserStatus.SUSPENDED })
       .expect(200);
     await request(server())
@@ -629,6 +657,7 @@ describe('Phase 2B authentication PostgreSQL HTTP integration', () => {
     await request(server())
       .patch(`/api/v1/admin/users/${customerId}/status`)
       .set('Cookie', accessCookie(admin))
+      .set('X-CSRF-Token', csrfToken(admin))
       .send({ status: UserStatus.ACTIVE })
       .expect(200);
     expect(
@@ -641,5 +670,90 @@ describe('Phase 2B authentication PostgreSQL HTTP integration', () => {
         where: { action: 'account_reactivated', entityId: customerId },
       }),
     ).toBe(1);
+  });
+
+  it('enforces session-bound CSRF tokens and exposes them safely for clients', async () => {
+    const first = await register();
+    const second = await register();
+    const a = await login(first.address);
+    const b = await login(second.address);
+    const fetched = await request(server())
+      .get('/api/v1/auth/csrf')
+      .set('Cookie', accessCookie(a))
+      .expect(200);
+    const issued = (fetched.body as { csrfToken: string }).csrfToken;
+    expect(issued).toMatch(/^[A-Za-z0-9_-]{43}\.[a-f0-9]{64}$/);
+    await request(server())
+      .post('/api/v1/wallets')
+      .set('Cookie', accessCookie(a))
+      .send({})
+      .expect(403);
+    await request(server())
+      .post('/api/v1/wallets')
+      .set('Cookie', accessCookie(a))
+      .set('X-CSRF-Token', csrfToken(b))
+      .send({})
+      .expect(403);
+    await request(server())
+      .post('/api/v1/auth/logout')
+      .set('Origin', origin)
+      .set('Cookie', [accessCookie(a), refreshCookie(a)])
+      .expect(403);
+    await request(server())
+      .post('/api/v1/wallets')
+      .set('Cookie', accessCookie(a))
+      .set('X-CSRF-Token', issued)
+      .send({})
+      .expect(201);
+  });
+
+  it('sets security headers, exact credentialed CORS, and safe body limits', async () => {
+    const health = await request(server()).get('/api/v1/health').expect(200);
+    expect(health.headers['x-content-type-options']).toBe('nosniff');
+    expect(health.headers['strict-transport-security']).toBeUndefined();
+    expect(health.headers['x-request-id']).toMatch(/^[0-9a-f-]{36}$/);
+    const trusted = await request(server())
+      .options('/api/v1/auth/login')
+      .set('Origin', origin)
+      .set('Access-Control-Request-Method', 'POST')
+      .expect(204);
+    expect(trusted.headers['access-control-allow-origin']).toBe(origin);
+    expect(trusted.headers['access-control-allow-credentials']).toBe('true');
+    const untrusted = await request(server())
+      .options('/api/v1/auth/login')
+      .set('Origin', 'https://evil.example')
+      .set('Access-Control-Request-Method', 'POST');
+    expect(untrusted.headers['access-control-allow-origin']).toBeUndefined();
+    await request(server())
+      .post('/api/v1/auth/register')
+      .set('Origin', origin)
+      .send({ email: email(), password, role: 'ADMIN' })
+      .expect(400);
+    const oversized = await request(server())
+      .post('/api/v1/auth/register')
+      .set('Origin', origin)
+      .send({ email: email(), password: 'a'.repeat(17_000) })
+      .expect(413);
+    expect(JSON.stringify(oversized.body)).not.toContain('stack');
+    await request(server())
+      .post('/api/v1/auth/register')
+      .set('Origin', origin)
+      .set('Content-Type', 'application/json')
+      .send('{broken')
+      .expect(400);
+  });
+
+  it('throttles repeated login attempts for one account', async () => {
+    const address = email();
+    const statuses: number[] = [];
+    for (let attempt = 0; attempt < 11; attempt += 1) {
+      const response = await request(server())
+        .post('/api/v1/auth/login')
+        .set('Origin', origin)
+        .send({ email: address, password });
+      statuses.push(response.status);
+    }
+    expect(statuses.slice(0, 10)).toEqual(Array(10).fill(401));
+    expect(statuses[10]).toBe(429);
   });
 });

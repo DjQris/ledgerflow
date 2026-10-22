@@ -20,10 +20,10 @@ export class AuthOriginGuard implements CanActivate {
     if (['GET', 'HEAD', 'OPTIONS'].includes(request.method)) return true;
     const origin = request.get('origin');
     const fetchSite = request.get('sec-fetch-site');
-    const expected = this.config.get('AUTH_ALLOWED_ORIGIN', { infer: true });
+    const expected = this.config.get('CORS_ALLOWED_ORIGINS', { infer: true });
 
     if (
-      (origin !== undefined && origin !== expected) ||
+      (origin !== undefined && !expected.includes(origin)) ||
       fetchSite === 'cross-site' ||
       (fetchSite !== undefined && origin === undefined)
     ) {

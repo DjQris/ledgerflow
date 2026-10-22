@@ -71,7 +71,7 @@ For an existing database, take a recoverable backup, stop the old API, run `npm 
 
 ## Phase 2B authentication
 
-Set a private `AUTH_SIGNING_KEY` in `.env` before using the following routes. `AUTH_ALLOWED_ORIGIN` must exactly match the browser application's origin. For HTTPS deployment, use an HTTPS allowed origin and `AUTH_COOKIE_SECURE=true`; production startup rejects missing signing keys, non-HTTPS origins, or insecure cookies. The signing key must remain stable across API restarts and instances, or existing access tokens will stop validating.
+Set a private `AUTH_SIGNING_KEY` in `.env` before using the following routes. `AUTH_ALLOWED_ORIGIN` and every `CORS_ALLOWED_ORIGINS` entry must exactly match a trusted browser application's origin. For HTTPS deployment, use HTTPS origins and `AUTH_COOKIE_SECURE=true`; production startup rejects missing signing keys, non-HTTPS origins, or insecure cookies. The signing key must remain stable across API restarts and instances, or existing access and CSRF tokens will stop validating.
 
 - `POST /api/v1/auth/register` accepts `{ "email": "customer@example.com", "password": "..." }` and creates an active CUSTOMER. Email is trimmed and lowercased; password must have at least 12 characters and fit within bcrypt's 72-byte UTF-8 limit. The response contains only `id`, `email`, `role`, and `status`.
 - `POST /api/v1/auth/login` accepts the same credentials, creates a PostgreSQL session, and sets HTTP-only access and refresh cookies. Unknown accounts, wrong passwords, and suspended accounts receive the same generic failure.
@@ -79,7 +79,15 @@ Set a private `AUTH_SIGNING_KEY` in `.env` before using the following routes. `A
 - `POST /api/v1/auth/refresh` rotates the opaque refresh cookie and access cookie; the presented token is consumed atomically. A reused token revokes its entire session, including newly rotated cookies, even if the reuse came from two simultaneous requests.
 - `POST /api/v1/auth/logout` revokes the session and its refresh tokens, and clears both cookies. Logout and reuse revocation take effect immediately for access tokens because every authenticated request checks the database session.
 
-Access JWTs last 15 minutes by default and are checked for signature, algorithm, issuer, audience, and expiry. Refresh tokens last up to seven days and only SHA-256 hashes are stored in PostgreSQL. Cookies use `HttpOnly`, `SameSite=Lax`, path `/`, and no domain; HTTPS mode also uses `Secure` and the `__Host-` prefix. Browser-originated writes are restricted to the configured origin, while requests without browser origin/fetch metadata are allowed for non-browser clients. The full CSRF controls are deferred to Phase 2D, so browser cookie authentication is **not yet production-ready**.
+Access JWTs last 15 minutes by default and are checked for signature, algorithm, issuer, audience, and expiry. Refresh tokens last up to seven days and only SHA-256 hashes are stored in PostgreSQL. Cookies use `HttpOnly`, `SameSite=Lax`, path `/`, and no domain; HTTPS mode also uses `Secure` and the `__Host-` prefix. Browser-originated writes are restricted to the configured origin, while requests without browser origin/fetch metadata are allowed for non-browser clients.
+
+## Phase 2D HTTP security
+
+Browser clients must send cookies with `credentials: 'include'`. Login returns a session-bound `X-CSRF-Token` response header; the client can also obtain a token with authenticated `GET /api/v1/auth/csrf` (JSON `csrfToken`). Send that token in `X-CSRF-Token` on every authenticated POST, PUT, PATCH, or DELETE request, including transfers, wallet creation, admin changes, refresh, and logout. Refresh returns a fresh token in the response header. Register and login are CSRF-exempt but still enforce the configured Origin/Fetch Metadata checks. Keep CSRF tokens out of URLs, logs, and persistent browser storage. A token from another session is rejected. The CORS policy allows credentials only for exact `CORS_ALLOWED_ORIGINS` entries, never a wildcard.
+
+Helmet supplies security headers (HSTS only in production). JSON and URL-encoded request bodies default to 16 KiB; configure `REQUEST_BODY_LIMIT_BYTES` within 1 KiB–1 MiB if needed. Unknown JSON fields are rejected. Request logs contain a generated request ID, method, route template, status, duration, and actor ID when authenticated, but not URLs with query strings, bodies, cookies, tokens, or idempotency keys. Error responses do not include internal stacks or database errors. Swagger UI is available only outside production; its `csrf-token` header scheme documents protected writes.
+
+The API limits general traffic to 600 requests/minute per IP, login/registration to 30/minute per IP plus 10 attempts/five minutes per normalized account, refresh to 60/minute per IP, transfer submission to 120/minute per IP, and admin routes to 60/minute per IP. These are **process-local** limits; they do not coordinate across multiple API instances. Deploy with one API instance until a compatible shared throttling store (for example Redis) and trusted proxy/IP configuration are added. Reverse-proxy, TLS, key management, and traffic/load validation remain deployment responsibilities.
 
 ## Transfers and authorization
 
@@ -95,7 +103,7 @@ Audit events include a safe actor identifier, event type, related resource, outc
 
 Run `npm run ledger:verify` to check that every posted journal has at least two entries with a zero sum and matching currencies, and that wallet balance projections match their posted ledger entries. The command prints a JSON report and exits with code 1 if it finds discrepancies. It never changes balances.
 
-Swagger UI at `/docs` lists all REST routes, cookie authentication, request bodies, and response codes. Missing authentication returns 401; insufficient role or ownership returns 403. Wallet creation and transfer submission return 201, invalid requests return 400, missing wallets return 404, and insufficient funds or idempotency conflicts return 409.
+Swagger UI at `/docs` in development/test lists REST routes, cookie authentication, CSRF-protected writes, request bodies, and response codes. Missing authentication returns 401; insufficient role or ownership returns 403. Wallet creation and transfer submission return 201, invalid requests return 400, missing wallets return 404, and insufficient funds or idempotency conflicts return 409.
 
 ## Quality commands
 
@@ -154,4 +162,4 @@ The transfer engine uses deterministic PostgreSQL row locks and one interactive 
 
 Phase 1F records successful operations atomically with their financial writes and records rejected transfers separately. `AuditEvent` rows are append-only. The integrity command provides an independent check of posted journal and wallet projection invariants.
 
-Current limits: historical provisional wallets remain suspended and unclaimable through the API, funding is seed-only, and inspection endpoints return at most 100 rows. There are no real payment rails, frontend, or deployment features. Before production browser use, implement Phase 2D CSRF controls, a verified enrollment path for provisional users, controlled initial-admin provisioning, audit retention, and load testing under expected traffic.
+Current limits: historical provisional wallets remain suspended and unclaimable through the API, funding is seed-only, and inspection endpoints return at most 100 rows. There are no real payment rails, frontend, or deployment features. Before production browser use, provide a verified enrollment path for provisional users, controlled initial-admin provisioning, audit retention, and load testing under expected traffic. Multiple API instances additionally need shared rate-limit storage.
