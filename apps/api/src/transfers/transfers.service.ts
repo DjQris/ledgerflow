@@ -21,6 +21,7 @@ import {
   InsufficientFundsError,
   InvalidTransferError,
   SelfTransferError,
+  TransferActorMismatchError,
   TransferConflictError,
   TransferError,
   TransferPersistenceError,
@@ -32,11 +33,12 @@ interface LockedWallet {
   accountId: string;
   cachedBalanceMinor: bigint;
   currency: string;
+  ownerReference: string;
   status: string;
   walletId: string;
 }
 
-interface ValidatedTransferCommand {
+export interface ValidatedTransferCommand {
   amountMinor: bigint;
   destinationWalletId: string;
   sourceWalletId: string;
@@ -47,15 +49,11 @@ export class TransfersService {
   constructor(private readonly prisma: PrismaService) {}
 
   async execute(input: TransferCommand): Promise<TransferResult> {
-    const command = this.validateCommand(input);
-
-    if (command.sourceWalletId === command.destinationWalletId) {
-      throw new SelfTransferError();
-    }
+    const command = this.prepare(input);
 
     try {
       return await this.prisma.$transaction(
-        async (transaction) => this.executeLocked(transaction, command),
+        async (transaction) => this.executeInTransaction(transaction, command),
         {
           isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
           maxWait: 5_000,
@@ -78,9 +76,19 @@ export class TransfersService {
     }
   }
 
-  private async executeLocked(
+  prepare(input: TransferCommand): ValidatedTransferCommand {
+    const command = this.validateCommand(input);
+    if (command.sourceWalletId === command.destinationWalletId) {
+      throw new SelfTransferError();
+    }
+    return command;
+  }
+
+  async executeInTransaction(
     transaction: Prisma.TransactionClient,
     command: ValidatedTransferCommand,
+    idempotencyRecordId?: string,
+    actor?: string,
   ): Promise<TransferResult> {
     const lockedWallets = new Map<string, LockedWallet>();
     const walletIds = [
@@ -108,6 +116,10 @@ export class TransfersService {
     this.assertWalletAvailable(sourceWallet);
     this.assertWalletAvailable(destinationWallet);
 
+    if (actor && sourceWallet.ownerReference !== actor) {
+      throw new TransferActorMismatchError();
+    }
+
     if (sourceWallet.cachedBalanceMinor < command.amountMinor) {
       throw new InsufficientFundsError();
     }
@@ -121,6 +133,7 @@ export class TransfersService {
         currency: NGN_CURRENCY,
         destinationWalletId: command.destinationWalletId,
         id: transferId,
+        idempotencyRecordId,
         sourceWalletId: command.sourceWalletId,
         status: TransferStatus.PENDING,
       },
@@ -172,7 +185,8 @@ export class TransfersService {
     await transaction.auditEvent.create({
       data: {
         action: 'completed',
-        actorType: 'internal_service',
+        actorId: actor,
+        actorType: actor ? 'simulated_owner' : 'internal_service',
         entityId: transferId,
         entityType: 'transfer',
         metadata: {
@@ -227,6 +241,7 @@ export class TransfersService {
         wallet."id" AS "walletId",
         wallet."status"::text AS "status",
         wallet."currency" AS "currency",
+        wallet."owner_reference" AS "ownerReference",
         account."id" AS "accountId",
         account."cached_balance_minor" AS "cachedBalanceMinor"
       FROM "wallets" AS wallet
@@ -264,8 +279,8 @@ export class TransfersService {
     try {
       return {
         amountMinor: parseMinorUnits(command.amountMinor),
-        destinationWalletId: command.destinationWalletId,
-        sourceWalletId: command.sourceWalletId,
+        destinationWalletId: command.destinationWalletId.toLowerCase(),
+        sourceWalletId: command.sourceWalletId.toLowerCase(),
       };
     } catch (error: unknown) {
       throw new InvalidTransferError('amountMinor is outside the valid range', {

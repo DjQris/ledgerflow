@@ -16,7 +16,7 @@ async function bootstrap(): Promise<void> {
     new ValidationPipe({
       forbidNonWhitelisted: true,
       transform: true,
-      transformOptions: { enableImplicitConversion: true },
+      transformOptions: { enableImplicitConversion: false },
       whitelist: true,
     }),
   );
@@ -29,6 +29,7 @@ async function bootstrap(): Promise<void> {
     .setVersion('1.0')
     .addTag('health')
     .addTag('wallets')
+    .addTag('transfers')
     .build();
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('docs', app, document);

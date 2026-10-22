@@ -2,6 +2,7 @@ export type TransferErrorCode =
   | 'INSUFFICIENT_FUNDS'
   | 'INVALID_TRANSFER'
   | 'SELF_TRANSFER'
+  | 'TRANSFER_ACTOR_MISMATCH'
   | 'TRANSFER_CONFLICT'
   | 'TRANSFER_PERSISTENCE_FAILURE'
   | 'WALLET_NOT_FOUND'
@@ -27,6 +28,15 @@ export class InvalidTransferError extends TransferError {
 export class SelfTransferError extends TransferError {
   constructor() {
     super('SELF_TRANSFER', 'Source and destination wallets must be different');
+  }
+}
+
+export class TransferActorMismatchError extends TransferError {
+  constructor() {
+    super(
+      'TRANSFER_ACTOR_MISMATCH',
+      'The source wallet does not belong to the simulated actor',
+    );
   }
 }
 

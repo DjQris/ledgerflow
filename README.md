@@ -57,6 +57,15 @@ Phase 1C exposes wallet management under `/api/v1/wallets`:
 
 There is intentionally no public funding endpoint. Development opening balances are created only by `npm run db:seed` as balanced ledger journals.
 
+## Local transfer simulation
+
+Phase 1E exposes transfer simulation only to loopback clients while `NODE_ENV` is `development` or `test`:
+
+- `POST /api/v1/transfers` requires `Idempotency-Key` and `X-Simulated-Actor` headers. The actor is the source wallet's `test-*` owner reference. The JSON body contains `sourceWalletId`, `destinationWalletId`, and a positive `amountMinor` string (kobo). Success returns HTTP 201 and the completed transfer result.
+- `GET /api/v1/transfers/` requires `X-Simulated-Actor` and returns up to 100 recent outgoing transfers for that actor.
+
+Reuse the same key and request to retrieve the original result, including after an API restart. Reusing a key with another amount or wallet returns HTTP 409. Different actors have separate key scopes. Failed transfers roll back their key reservation, so the same request can be retried. These endpoints use simulated ownership only; Phase 2 will introduce authentication.
+
 ## Quality commands
 
 ```bash
@@ -72,7 +81,7 @@ npm run db:status
 
 Run `npm run format` to apply Prettier formatting.
 
-The transfer integration suite requires `INTEGRATION_DATABASE_URL` to reference a dedicated database named `ledgerflow_phase1d_integration_*` with the committed migrations applied. This safeguard prevents the suite from writing test records to the development database.
+The transfer integration suites require `INTEGRATION_DATABASE_URL` to reference a dedicated database named `ledgerflow_phase1d_integration_*` with the committed migrations applied. This safeguard prevents the suites from writing test records to the development database.
 
 Database changes must be committed as Prisma migrations. Create a development migration with:
 
@@ -97,6 +106,6 @@ ledgerflow/
 
 The API includes application configuration, shared HTTP exception handling, health, wallet management, an internal ledger service, and a global Prisma module. The financial schema and its source-of-truth and immutability rules are documented in [docs/financial-data-model.md](docs/financial-data-model.md).
 
-The internal transfer engine uses deterministic PostgreSQL row locks and one interactive transaction for every financial write. It is intentionally not exposed through an HTTP controller; the public endpoint and idempotency layer remain future work.
+The transfer engine uses deterministic PostgreSQL row locks and one interactive transaction for every financial write. The Phase 1E API reserves a database unique `(scope, key)` row and completes that row and the transfer in the same transaction. Concurrent duplicate requests wait for the first transaction and replay its saved result; no in-memory lock or cache is used.
 
 Authentication, Redis, real-money integrations, public funding operations, and frontend features remain outside the current phase.

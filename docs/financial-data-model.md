@@ -25,6 +25,8 @@ LedgerFlow uses a double-entry ledger. All monetary values are stored in signed 
 
 Application and direct SQL updates to `cachedBalanceMinor` are rejected by a database trigger. Only the nested journal-posting trigger may change this projection. Wallet transfers lock both participating wallet/account rows in deterministic UUID order, recheck the source balance under lock, and create the transfer, journal, postings, projection updates, and completion state in one database transaction.
 
+Phase 1E scopes each idempotency key to the simulated source owner and transfer operation. The request hash covers canonical wallet UUIDs and amount in minor units. The existing unique `(scope, key)` constraint coordinates concurrent inserts in PostgreSQL. The idempotency row, saved HTTP result, transfer, and journal commit together; failure rolls all of them back. Completed duplicate requests return the saved result without another ledger write.
+
 Posted journals and their entries are immutable. Corrections require a new zero-sum reversal journal linked through `reversalOfId`. Audit events are always immutable. Wallets, transfers, idempotency records, pending journals, and cached account balances are operational records and may change according to their lifecycle.
 
 Database triggers reject unbalanced, single-entry, or cross-currency journals when they are posted. They also prevent inserting, updating, or deleting entries in a posted journal.
