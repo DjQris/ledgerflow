@@ -7,7 +7,8 @@ import { AuditEventResponseDto } from './dto/audit-event-response.dto';
 export interface AuditEventInput {
   action: string;
   actorId?: string;
-  actorType: 'simulated_owner' | 'system' | 'internal_service' | 'unknown';
+  actorType:
+    'simulated_owner' | 'system' | 'internal_service' | 'user' | 'unknown';
   entityId: string;
   entityType: string;
   metadata?: Prisma.InputJsonValue;
@@ -28,6 +29,15 @@ export class AuditService {
 
   async recordRejected(event: AuditEventInput): Promise<void> {
     await this.prisma.auditEvent.create({
+      data: { ...event, outcome: AuditOutcome.REJECTED },
+    });
+  }
+
+  async recordRejectedInTransaction(
+    transaction: Prisma.TransactionClient,
+    event: AuditEventInput,
+  ): Promise<void> {
+    await transaction.auditEvent.create({
       data: { ...event, outcome: AuditOutcome.REJECTED },
     });
   }

@@ -11,9 +11,9 @@ LedgerFlow uses a double-entry ledger. All monetary values are stored in signed 
 
 ## Models and relationships
 
-- `User` is the future security principal with a normalized unique email, role, status, and optional password hash. Migrated and newly simulated users are suspended with no password.
+- `User` is the security principal with a normalized unique email, role, status, and optional password hash. New self-registered customers are active; migrated and newly simulated users remain suspended with no password.
 - `Wallet` represents an NGN balance container for a simulated owner reference. It has a required `User` owner and exactly one wallet-type `LedgerAccount` once provisioned. The owner reference remains for Phase 1 API compatibility.
-- `AuthSession` references a user, and `RefreshToken` references a session. A token stores only a 64-character lowercase hash and may point to one parent token for later rotation. These tables are prepared but not used by any authentication flow yet.
+- `AuthSession` references a user, and `RefreshToken` references a session. An opaque token stores only a 64-character lowercase SHA-256 hash and may point to one parent token for rotation. Session revocation invalidates access and all refresh tokens immediately; refresh-token reuse revokes the affected session.
 - `LedgerAccount` holds the cached balance for a wallet or represents a system account. The seeded `SYSTEM_FUNDING_CLEARING_NGN` account is the counterparty for simulated development opening funds; the Phase 1B KES system account remains available for historical compatibility.
 - `LedgerTransaction` is the journal header. It owns two or more `LedgerEntry` postings and can point to the original journal when it is a reversal.
 - `LedgerEntry` is a signed posting to one ledger account. Entries belonging to a posted journal must sum to zero and use the journal currency.

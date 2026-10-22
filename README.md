@@ -24,7 +24,7 @@ npm run db:generate
 npm run db:seed
 ```
 
-The defaults in `.env.example` are safe for local development. Keep real secrets in `.env`; local environment files are ignored by Git.
+The defaults in `.env.example` are safe for local development. Keep real secrets in `.env`; local environment files are ignored by Git. Authentication remains unavailable until you set a private `AUTH_SIGNING_KEY` of at least 32 random bytes, for example by generating one locally with `openssl rand -hex 48` and copying it into `.env`. Never commit or share the key.
 
 `db:up` starts PostgreSQL 18 on `127.0.0.1:5432`, backed by a persistent Docker volume. Confirm it is healthy with `docker compose ps`.
 
@@ -65,9 +65,21 @@ There is intentionally no public funding endpoint. Development opening balances 
 
 The database now contains `User`, `AuthSession`, and `RefreshToken` models. Every wallet has a required `userId` foreign key. Existing wallet IDs, balances, journals, transfers, and audit events are preserved. The migration creates one provisional customer user per existing wallet, using the wallet UUID as the user UUID and a unique `simulated-<wallet-uuid>@ledgerflow.invalid` address. These users are suspended and have `passwordHash = NULL`; they cannot be used to sign in. New simulated wallets provision the same kind of user in the wallet-creation transaction. The legacy `ownerReference` remains for Phase 1 API compatibility.
 
-`auth/`, `access-control/`, and `security/` are module boundaries only. There are no authentication endpoints, sessions in use, access tokens, role guards, or changes to transfer authorization yet. `.env.example` reserves future authentication settings but includes no signing key or user passwords. Do not activate or reuse provisional identities without an explicit enrollment and credential-setting flow in a later phase.
+Phase 2B activates `auth/` and `security/` for new customer registration and sessions. `access-control/` remains a reserved boundary: authentication does not authorize wallet or transfer access. `.env.example` contains no signing key or user passwords. Do not activate or reuse provisional identities without an explicit ownership-verification and credential-setting flow in a later phase.
 
 For an existing database, take a recoverable backup, stop the old API, run `npm run db:migrate:deploy`, regenerate Prisma Client, then start the updated API. The Phase 2A migration runs in a PostgreSQL transaction, backfills all existing wallets, verifies ownership is complete, and only then sets `wallets.user_id` to `NOT NULL` and adds its foreign key. Old API instances cannot create wallets after the new constraint is in place, so do not run old and new versions together during this migration. See [the identity migration notes](docs/phase2a-identity-migration.md) for verification queries and compatibility risks.
+
+## Phase 2B authentication
+
+Set a private `AUTH_SIGNING_KEY` in `.env` before using the following routes. `AUTH_ALLOWED_ORIGIN` must exactly match the browser application's origin. For HTTPS deployment, use an HTTPS allowed origin and `AUTH_COOKIE_SECURE=true`; production startup rejects missing signing keys, non-HTTPS origins, or insecure cookies. The signing key must remain stable across API restarts and instances, or existing access tokens will stop validating.
+
+- `POST /api/v1/auth/register` accepts `{ "email": "customer@example.com", "password": "..." }` and creates an active CUSTOMER. Email is trimmed and lowercased; password must have at least 12 characters and fit within bcrypt's 72-byte UTF-8 limit. The response contains only `id`, `email`, `role`, and `status`.
+- `POST /api/v1/auth/login` accepts the same credentials, creates a PostgreSQL session, and sets HTTP-only access and refresh cookies. Unknown accounts, wrong passwords, and suspended accounts receive the same generic failure.
+- `GET /api/v1/auth/me` requires an unexpired access cookie and active database session, and returns the same safe identity fields.
+- `POST /api/v1/auth/refresh` rotates the opaque refresh cookie and access cookie; the presented token is consumed atomically. A reused token revokes its entire session, including newly rotated cookies, even if the reuse came from two simultaneous requests.
+- `POST /api/v1/auth/logout` revokes the session and its refresh tokens, and clears both cookies. Logout and reuse revocation take effect immediately for access tokens because every authenticated request checks the database session.
+
+Access JWTs last 15 minutes by default and are checked for signature, algorithm, issuer, audience, and expiry. Refresh tokens last up to seven days and only SHA-256 hashes are stored in PostgreSQL. Cookies use `HttpOnly`, `SameSite=Lax`, path `/`, and no domain; HTTPS mode also uses `Secure` and the `__Host-` prefix. Browser-originated auth writes are restricted to the configured origin, while requests without browser origin/fetch metadata are allowed for non-browser clients. The full CSRF controls are deferred to Phase 2D, so browser cookie authentication is **not yet production-ready**. The local simulated wallet/transfer endpoints remain separate and are not authorized by these sessions.
 
 ## Local transfer simulation
 
@@ -76,7 +88,7 @@ Phase 1E exposes transfer simulation only to loopback clients while `NODE_ENV` i
 - `POST /api/v1/transfers` requires `Idempotency-Key` and `X-Simulated-Actor` headers. The actor is the source wallet's `test-*` owner reference. The JSON body contains `sourceWalletId`, `destinationWalletId`, and a positive `amountMinor` string (kobo). Success returns HTTP 201 and the completed transfer result.
 - `GET /api/v1/transfers/` requires `X-Simulated-Actor` and returns up to 100 recent outgoing transfers for that actor.
 
-Reuse the same key and request to retrieve the original result, including after an API restart. Reusing a key with another amount or wallet returns HTTP 409. Different actors have separate key scopes. Failed transfers roll back their key reservation, so the same request can be retried. These endpoints use simulated ownership only; Phase 2 will introduce authentication.
+Reuse the same key and request to retrieve the original result, including after an API restart. Reusing a key with another amount or wallet returns HTTP 409. Different actors have separate key scopes. Failed transfers roll back their key reservation, so the same request can be retried. These endpoints use simulated ownership only; Phase 2B customer authentication does not change their authorization model.
 
 ## Audit API and financial checks
 
@@ -103,7 +115,7 @@ npm run ledger:verify
 
 Run `npm run format` to apply Prettier formatting.
 
-Integration and concurrency tests require `INTEGRATION_DATABASE_URL` to reference a dedicated database named `ledgerflow_phase1f_integration_*` with the committed migrations applied. This historical test-database prefix is retained for all Phase 1 and 2A suites. For the default local PostgreSQL container:
+Integration and concurrency tests require `INTEGRATION_DATABASE_URL` to reference a dedicated database named `ledgerflow_phase1f_integration_*` with the committed migrations applied. This historical test-database prefix is retained for all Phase 1 and 2A/2B suites. The auth suite generates an ephemeral signing key in memory. For the default local PostgreSQL container:
 
 ```bash
 docker exec ledgerflow-database-1 createdb -U ledgerflow ledgerflow_phase1f_integration_local
@@ -137,10 +149,10 @@ ledgerflow/
 └── package.json   # Workspace scripts
 ```
 
-The API includes application configuration, shared HTTP exception handling, health, wallet management, an internal ledger service, a global Prisma module, and the Phase 2A `users/`, `auth/`, `access-control/`, and `security/` modules. The financial schema and its source-of-truth and immutability rules are documented in [docs/financial-data-model.md](docs/financial-data-model.md).
+The API includes application configuration, shared HTTP exception handling, health, wallet management, an internal ledger service, a global Prisma module, Phase 2A identity ownership, and Phase 2B authentication/session services. The financial schema and its source-of-truth and immutability rules are documented in [docs/financial-data-model.md](docs/financial-data-model.md).
 
 The transfer engine uses deterministic PostgreSQL row locks and one interactive transaction for every financial write. The Phase 1E API reserves a database unique `(scope, key)` row and completes that row and the transfer in the same transaction. Concurrent duplicate requests wait for the first transaction and replay its saved result; no in-memory lock or cache is used.
 
 Phase 1F records successful operations atomically with their financial writes and records rejected transfers separately. `AuditEvent` rows are append-only. The integrity command provides an independent check of posted journal and wallet projection invariants.
 
-Current limits: actors are simulated, transfers and audit inspection work only locally, funding is seed-only, and inspection endpoints return at most 100 rows. There are no real payment rails, active authentication, frontend, or deployment features. Before activating authentication, design secure registration or migration of provisional identities, password hashing, session and refresh-token rotation, role enforcement, and audit retention; also load-test the transaction path under expected traffic.
+Current limits: actors for wallet/transfer routes are still simulated, transfers and audit inspection work only locally, funding is seed-only, and inspection endpoints return at most 100 rows. Authentication exists for new customers, but does not grant wallet ownership or authorize transfers. There are no real payment rails, frontend, or deployment features. Before production browser use, implement Phase 2D CSRF controls, role/ownership authorization, a verified enrollment path for provisional users, audit retention, and load testing under expected traffic.
