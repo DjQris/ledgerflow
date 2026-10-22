@@ -1,5 +1,11 @@
 import { Module } from '@nestjs/common';
+import { AuditModule } from '../audit/audit.module';
+import { AdminUsersController } from './admin-users.controller';
+import { AdminUsersService } from './admin-users.service';
 
-// Role policies and guards will be added in a later phase.
-@Module({})
+@Module({
+  imports: [AuditModule],
+  controllers: [AdminUsersController],
+  providers: [AdminUsersService],
+})
 export class AccessControlModule {}

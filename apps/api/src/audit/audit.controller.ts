@@ -1,27 +1,32 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
+  ApiCookieAuth,
   ApiForbiddenResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
-import { LocalSimulationGuard } from '../common/guards/local-simulation.guard';
+import { Roles } from '../access-control/decorators/roles.decorator';
+import { PermissionPolicies } from '../access-control/permission-policies';
 import { AuditService } from './audit.service';
 import { AuditEventResponseDto } from './dto/audit-event-response.dto';
 import { AuditQueryDto } from './dto/audit-query.dto';
 
 @ApiTags('audit')
+@ApiCookieAuth('access-cookie')
+@ApiUnauthorizedResponse({ description: 'An active session is required.' })
 @Controller('audit-events')
-@UseGuards(LocalSimulationGuard)
 export class AuditController {
   constructor(private readonly audit: AuditService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Inspect recent audit events in local development' })
+  @Roles(...PermissionPolicies.auditRead)
+  @ApiOperation({ summary: 'Inspect recent audit events' })
   @ApiOkResponse({ type: AuditEventResponseDto, isArray: true })
   @ApiBadRequestResponse({ description: 'Invalid result limit.' })
-  @ApiForbiddenResponse({ description: 'Local development access only.' })
+  @ApiForbiddenResponse({ description: 'Operations or admin access required.' })
   list(@Query() query: AuditQueryDto): Promise<AuditEventResponseDto[]> {
     return this.audit.list(query.limit);
   }

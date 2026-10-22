@@ -24,6 +24,9 @@ import {
 } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 
+import { Public } from '../access-control/decorators/public.decorator';
+import { Roles } from '../access-control/decorators/roles.decorator';
+import { PermissionPolicies } from '../access-control/permission-policies';
 import { CookieService } from '../security/cookie.service';
 import { AuthService } from './auth.service';
 import type { AuthenticatedUser } from './auth.types';
@@ -46,6 +49,7 @@ export class AuthController {
   ) {}
 
   @Post('register')
+  @Public()
   @UseGuards(AuthOriginGuard)
   @ApiOperation({ summary: 'Register a customer account' })
   @ApiCreatedResponse({ type: UserProfileDto })
@@ -57,6 +61,7 @@ export class AuthController {
   }
 
   @Post('login')
+  @Public()
   @UseGuards(AuthOriginGuard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Create a session and set HTTP-only cookies' })
@@ -73,6 +78,7 @@ export class AuthController {
   }
 
   @Post('refresh')
+  @Public()
   @UseGuards(AuthOriginGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Rotate a refresh token and renew access' })
@@ -93,6 +99,7 @@ export class AuthController {
   }
 
   @Post('logout')
+  @Public()
   @UseGuards(AuthOriginGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Revoke the active session and clear cookies' })
@@ -113,6 +120,7 @@ export class AuthController {
   }
 
   @Get('me')
+  @Roles(...PermissionPolicies.identityRead)
   @UseGuards(AuthenticationGuard)
   @ApiCookieAuth('access-cookie')
   @ApiOperation({ summary: 'Read the current authenticated customer profile' })

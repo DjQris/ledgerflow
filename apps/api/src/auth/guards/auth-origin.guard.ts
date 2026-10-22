@@ -17,6 +17,7 @@ export class AuthOriginGuard implements CanActivate {
 
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<Request>();
+    if (['GET', 'HEAD', 'OPTIONS'].includes(request.method)) return true;
     const origin = request.get('origin');
     const fetchSite = request.get('sec-fetch-site');
     const expected = this.config.get('AUTH_ALLOWED_ORIGIN', { infer: true });

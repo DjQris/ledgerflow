@@ -9,12 +9,12 @@ import {
   InternalServerErrorException,
   NotFoundException,
   Post,
-  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiConflictResponse,
+  ApiCookieAuth,
   ApiCreatedResponse,
   ApiForbiddenResponse,
   ApiHeader,
@@ -23,9 +23,14 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiTags,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 
-import { LocalSimulationGuard } from '../common/guards/local-simulation.guard';
+import { Roles } from '../access-control/decorators/roles.decorator';
+import { PermissionPolicies } from '../access-control/permission-policies';
+import type { AuthenticatedUser } from '../auth/auth.types';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { UserRole } from '../generated/prisma/enums';
 
 import { TransferCommand } from './dto/transfer.command';
 import {
@@ -38,23 +43,19 @@ import { TransferIdempotencyService } from './transfer-idempotency.service';
 import { TransferRejectionAuditInterceptor } from './transfer-rejection-audit.interceptor';
 
 @ApiTags('transfers')
-@ApiHeader({
-  name: 'X-Simulated-Actor',
-  required: true,
-  description: 'Source wallet test-* owner reference',
-})
+@ApiCookieAuth('access-cookie')
+@ApiUnauthorizedResponse({ description: 'An active session is required.' })
 @ApiForbiddenResponse({
-  description:
-    'Local development access only, or actor does not own the source wallet.',
+  description: 'The signed-in user cannot access the source wallet.',
 })
-@UseGuards(LocalSimulationGuard)
 @Controller('transfers')
 export class TransfersController {
   constructor(private readonly idempotency: TransferIdempotencyService) {}
 
   @Post()
+  @Roles(...PermissionPolicies.customerTransferCreate)
   @UseInterceptors(TransferRejectionAuditInterceptor)
-  @ApiOperation({ summary: 'Submit an idempotent local wallet transfer' })
+  @ApiOperation({ summary: 'Transfer from an owned wallet' })
   @ApiHeader({
     name: 'Idempotency-Key',
     required: true,
@@ -62,7 +63,7 @@ export class TransfersController {
   })
   @ApiCreatedResponse({ type: TransferResponseDto })
   @ApiBadRequestResponse({
-    description: 'Invalid key, actor, or transfer command.',
+    description: 'Invalid key or transfer command.',
   })
   @ApiConflictResponse({
     description:
@@ -75,10 +76,10 @@ export class TransfersController {
   async create(
     @Body() command: TransferCommand,
     @Headers('idempotency-key') key: string | undefined,
-    @Headers('x-simulated-actor') actor: string | undefined,
+    @CurrentUser() user: AuthenticatedUser,
   ): Promise<TransferResult> {
     try {
-      return await this.idempotency.submit(command, key, actor);
+      return await this.idempotency.submitForUser(command, key, user.id);
     } catch (error: unknown) {
       if (error instanceof TransferError) {
         switch (error.code) {
@@ -102,14 +103,16 @@ export class TransfersController {
   }
 
   @Get()
+  @Roles(...PermissionPolicies.transferRead)
   @ApiOperation({
-    summary: 'Inspect the 100 most recent outgoing transfers for a local actor',
+    summary: 'Inspect permitted recent outgoing transfers',
   })
   @ApiOkResponse({ type: TransferInspectionDto, isArray: true })
-  @ApiBadRequestResponse({ description: 'Invalid simulated actor.' })
   list(
-    @Headers('x-simulated-actor') actor: string | undefined,
+    @CurrentUser() user: AuthenticatedUser,
   ): Promise<TransferInspectionDto[]> {
-    return this.idempotency.list(actor);
+    return user.role === UserRole.CUSTOMER
+      ? this.idempotency.listForUser(user.id)
+      : this.idempotency.listForStaff();
   }
 }

@@ -1,4 +1,19 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  ConflictException,
+  Controller,
+  ForbiddenException,
+  Get,
+  Headers,
+  INestApplication,
+  InternalServerErrorException,
+  NotFoundException,
+  Post,
+  UseGuards,
+  UseInterceptors,
+  ValidationPipe,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpAdapterHost } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
@@ -21,8 +36,56 @@ import { LocalSimulationGuard } from '../common/guards/local-simulation.guard';
 import { TransferIdempotencyService } from './transfer-idempotency.service';
 import { TransferRejectionAuditInterceptor } from './transfer-rejection-audit.interceptor';
 import { TransferResult } from './dto/transfer-result.dto';
-import { TransfersController } from './transfers.controller';
+import { TransferCommand } from './dto/transfer.command';
+import { TransferInspectionDto } from './dto/transfer-http.dto';
+import { TransferError } from './errors/transfer.errors';
 import { TransfersService } from './transfers.service';
+
+// Historical Phase 1 HTTP harness: exercises the simulated financial workflow
+// without granting the legacy actor header authority in the production controller.
+@Controller('transfers')
+@UseGuards(LocalSimulationGuard)
+class LegacyTransferTestController {
+  constructor(private readonly idempotency: TransferIdempotencyService) {}
+
+  @Post()
+  @UseInterceptors(TransferRejectionAuditInterceptor)
+  async create(
+    @Body() command: TransferCommand,
+    @Headers('idempotency-key') key: string | undefined,
+    @Headers('x-simulated-actor') actor: string | undefined,
+  ): Promise<TransferResult> {
+    try {
+      return await this.idempotency.submit(command, key, actor);
+    } catch (error: unknown) {
+      if (error instanceof TransferError) {
+        switch (error.code) {
+          case 'INVALID_TRANSFER':
+          case 'SELF_TRANSFER':
+            throw new BadRequestException(error.message);
+          case 'TRANSFER_ACTOR_MISMATCH':
+            throw new ForbiddenException(error.message);
+          case 'WALLET_NOT_FOUND':
+            throw new NotFoundException(error.message);
+          case 'INSUFFICIENT_FUNDS':
+          case 'TRANSFER_CONFLICT':
+          case 'WALLET_UNAVAILABLE':
+            throw new ConflictException(error.message);
+          case 'TRANSFER_PERSISTENCE_FAILURE':
+            throw new InternalServerErrorException(error.message);
+        }
+      }
+      throw error;
+    }
+  }
+
+  @Get()
+  list(
+    @Headers('x-simulated-actor') actor: string | undefined,
+  ): Promise<TransferInspectionDto[]> {
+    return this.idempotency.list(actor);
+  }
+}
 
 jest.setTimeout(40_000);
 
@@ -75,7 +138,7 @@ describe('Transfer HTTP idempotency PostgreSQL integration', () => {
 
   async function startApp(): Promise<void> {
     const module = await Test.createTestingModule({
-      controllers: [TransfersController],
+      controllers: [LegacyTransferTestController],
       providers: [
         { provide: ConfigService, useValue: config },
         PrismaService,

@@ -10,6 +10,7 @@ import request from 'supertest';
 
 import { ApiExceptionFilter } from '../common/filters/api-exception.filter';
 import { UserRole, UserStatus } from '../generated/prisma/enums';
+import { LedgerService } from '../ledger/ledger.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 jest.setTimeout(60_000);
@@ -17,6 +18,7 @@ jest.setTimeout(60_000);
 describe('Phase 2B authentication PostgreSQL HTTP integration', () => {
   let app: INestApplication;
   let prisma: PrismaService;
+  let ledger: LedgerService;
   const origin = 'http://localhost:3000';
   const signingKey = randomBytes(48).toString('hex');
   const prior = {
@@ -58,6 +60,7 @@ describe('Phase 2B authentication PostgreSQL HTTP integration', () => {
     app.useGlobalFilters(new ApiExceptionFilter(app.get(HttpAdapterHost)));
     await app.init();
     prisma = app.get(PrismaService);
+    ledger = app.get(LedgerService);
   });
 
   afterAll(async () => {
@@ -414,5 +417,229 @@ describe('Phase 2B authentication PostgreSQL HTTP integration', () => {
       .post('/api/v1/auth/logout')
       .set('Origin', 'https://evil.example')
       .expect(403);
+  });
+
+  it('enforces customer wallet ownership and permits only owned-source transfers', async () => {
+    const first = await register();
+    const second = await register();
+    const a = await login(first.address);
+    const b = await login(second.address);
+    const firstWallet = await request(server())
+      .post('/api/v1/wallets')
+      .set('Cookie', accessCookie(a))
+      .send({})
+      .expect(201);
+    const secondWallet = await request(server())
+      .post('/api/v1/wallets')
+      .set('Cookie', accessCookie(b))
+      .send({})
+      .expect(201);
+    const aId = (firstWallet.body as { id: string }).id;
+    const bId = (secondWallet.body as { id: string }).id;
+    await request(server()).get('/api/v1/wallets').expect(401);
+    await request(server()).post('/api/v1/transfers').send({}).expect(401);
+    await request(server())
+      .post('/api/v1/wallets')
+      .set('Cookie', accessCookie(a))
+      .send({ ownerId: profile(b).id })
+      .expect(400);
+    const ownList = await request(server())
+      .get('/api/v1/wallets')
+      .set('Cookie', accessCookie(a))
+      .expect(200);
+    expect(
+      (ownList.body as Array<{ id: string }>).map((wallet) => wallet.id),
+    ).toContain(aId);
+    expect(
+      (ownList.body as Array<{ id: string }>).map((wallet) => wallet.id),
+    ).not.toContain(bId);
+    await request(server())
+      .get(`/api/v1/wallets/${bId}`)
+      .set('Cookie', accessCookie(a))
+      .expect(403);
+    await request(server())
+      .get(`/api/v1/wallets/${bId}/transactions`)
+      .set('Cookie', accessCookie(a))
+      .expect(403);
+    expect(
+      await prisma.auditEvent.count({
+        where: {
+          action: 'access_denied',
+          actorId: profile(a).id,
+          entityId: bId,
+        },
+      }),
+    ).toBe(2);
+    await ledger.postDevelopmentOpeningFunding({
+      amountMinor: 1000n,
+      externalReference: `phase2c:${randomUUID()}`,
+      walletId: aId,
+    });
+    const body = {
+      sourceWalletId: aId,
+      destinationWalletId: bId,
+      amountMinor: '100',
+    };
+    await request(server())
+      .post('/api/v1/transfers')
+      .set('Cookie', accessCookie(b))
+      .set('Idempotency-Key', randomUUID())
+      .send(body)
+      .expect(403);
+    await request(server())
+      .post('/api/v1/transfers')
+      .set('Cookie', accessCookie(a))
+      .set('Idempotency-Key', randomUUID())
+      .set('X-Simulated-Actor', 'test-someone-else')
+      .send(body)
+      .expect(201);
+    await request(server())
+      .post('/api/v1/transfers')
+      .set('Cookie', accessCookie(a))
+      .set('Origin', 'https://evil.example')
+      .set('Idempotency-Key', randomUUID())
+      .send(body)
+      .expect(403);
+    const history = await request(server())
+      .get(`/api/v1/wallets/${aId}/transactions`)
+      .set('Cookie', accessCookie(a))
+      .expect(200);
+    expect(
+      (history.body as { pagination: { total: number } }).pagination.total,
+    ).toBeGreaterThan(0);
+    const bTransfers = await request(server())
+      .get('/api/v1/transfers')
+      .set('Cookie', accessCookie(b))
+      .expect(200);
+    expect(bTransfers.body).toEqual([]);
+    await prisma.user.update({
+      where: { id: profile(a).id },
+      data: { status: UserStatus.SUSPENDED },
+    });
+    await request(server())
+      .post('/api/v1/transfers')
+      .set('Cookie', accessCookie(a))
+      .set('Idempotency-Key', randomUUID())
+      .send(body)
+      .expect(401);
+  });
+
+  it('separates operations reads from writes and audits administrative changes', async () => {
+    const adminRegistration = await register();
+    const operationsRegistration = await register();
+    const customerRegistration = await register();
+    const adminId = (adminRegistration.response.body as { id: string }).id;
+    const operationsId = (
+      operationsRegistration.response.body as { id: string }
+    ).id;
+    const customerId = (customerRegistration.response.body as { id: string })
+      .id;
+    await prisma.user.update({
+      where: { id: adminId },
+      data: { role: UserRole.ADMIN },
+    });
+    await prisma.user.update({
+      where: { id: operationsId },
+      data: { role: UserRole.OPERATIONS },
+    });
+    const admin = await login(adminRegistration.address);
+    const operations = await login(operationsRegistration.address);
+    const customer = await login(customerRegistration.address);
+    await request(server())
+      .get('/api/v1/audit-events')
+      .set('Cookie', accessCookie(customer))
+      .expect(403);
+    await request(server())
+      .get('/api/v1/audit-events')
+      .set('Cookie', accessCookie(operations))
+      .expect(200);
+    await request(server())
+      .get('/api/v1/wallets')
+      .set('Cookie', accessCookie(operations))
+      .expect(200);
+    await request(server())
+      .post('/api/v1/wallets')
+      .set('Cookie', accessCookie(operations))
+      .send({})
+      .expect(403);
+    await request(server())
+      .post('/api/v1/transfers')
+      .set('Cookie', accessCookie(operations))
+      .set('Idempotency-Key', randomUUID())
+      .send({})
+      .expect(403);
+    await request(server())
+      .get('/api/v1/admin/users')
+      .set('Cookie', accessCookie(operations))
+      .expect(403);
+    await request(server())
+      .get('/api/v1/admin/users')
+      .set('Cookie', accessCookie(admin))
+      .expect(200);
+    await request(server())
+      .post('/api/v1/transfers')
+      .set('Cookie', accessCookie(admin))
+      .set('Idempotency-Key', randomUUID())
+      .send({})
+      .expect(403);
+    const simulatedWallet = await request(server())
+      .post('/api/v1/wallets/simulated')
+      .set('Cookie', accessCookie(admin))
+      .send({ ownerReference: `test-phase2c-${randomUUID()}` })
+      .expect(201);
+    const provisional = await prisma.wallet.findUniqueOrThrow({
+      where: { id: (simulatedWallet.body as { id: string }).id },
+      include: { user: true },
+    });
+    expect(provisional.user.status).toBe(UserStatus.SUSPENDED);
+    await request(server())
+      .patch(`/api/v1/admin/users/${adminId}/role`)
+      .set('Cookie', accessCookie(admin))
+      .send({ role: UserRole.CUSTOMER })
+      .expect(403);
+    await request(server())
+      .patch(`/api/v1/admin/users/${customerId}/role`)
+      .set('Cookie', accessCookie(admin))
+      .send({ role: UserRole.OPERATIONS })
+      .expect(200);
+    await request(server())
+      .get('/api/v1/audit-events')
+      .set('Cookie', accessCookie(customer))
+      .expect(200);
+    await request(server())
+      .patch(`/api/v1/admin/users/${customerId}/role`)
+      .set('Cookie', accessCookie(admin))
+      .set('Origin', 'https://evil.example')
+      .send({ role: UserRole.ADMIN })
+      .expect(403);
+    expect(
+      await prisma.auditEvent.count({
+        where: { action: 'account_role_changed', entityId: customerId },
+      }),
+    ).toBe(1);
+    await request(server())
+      .patch(`/api/v1/admin/users/${customerId}/status`)
+      .set('Cookie', accessCookie(admin))
+      .send({ status: UserStatus.SUSPENDED })
+      .expect(200);
+    await request(server())
+      .get('/api/v1/auth/me')
+      .set('Cookie', accessCookie(customer))
+      .expect(401);
+    await request(server())
+      .patch(`/api/v1/admin/users/${customerId}/status`)
+      .set('Cookie', accessCookie(admin))
+      .send({ status: UserStatus.ACTIVE })
+      .expect(200);
+    expect(
+      await prisma.auditEvent.count({
+        where: { action: 'account_suspended', entityId: customerId },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.auditEvent.count({
+        where: { action: 'account_reactivated', entityId: customerId },
+      }),
+    ).toBe(1);
   });
 });

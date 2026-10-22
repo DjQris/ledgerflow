@@ -37,8 +37,32 @@ export class TransferIdempotencyService {
   ): Promise<TransferResult> {
     const key = this.validateKey(rawKey);
     const actor = this.validateActor(rawActor);
+    return this.submitScoped(input, key, `transfer:${this.hash(actor)}`, actor);
+  }
+
+  async submitForUser(
+    input: TransferCommand,
+    rawKey: string | undefined,
+    userId: string,
+  ): Promise<TransferResult> {
+    const key = this.validateKey(rawKey);
+    return this.submitScoped(
+      input,
+      key,
+      `transfer:user:${userId}`,
+      undefined,
+      userId,
+    );
+  }
+
+  private async submitScoped(
+    input: TransferCommand,
+    key: string,
+    scope: string,
+    actor?: string,
+    userId?: string,
+  ): Promise<TransferResult> {
     const command = this.transfers.prepare(input);
-    const scope = `transfer:${this.hash(actor)}`;
     const requestHash = this.hash(
       JSON.stringify({
         amountMinor: command.amountMinor.toString(),
@@ -86,6 +110,7 @@ export class TransferIdempotencyService {
             command,
             id,
             actor,
+            userId,
           );
           await transaction.idempotencyRecord.update({
             data: {
@@ -125,6 +150,33 @@ export class TransferIdempotencyService {
       where: { sourceWallet: { ownerReference: actor } },
     });
 
+    return transfers.map((transfer) => ({
+      amountMinor: transfer.amountMinor.toString(),
+      completedAt: transfer.completedAt?.toISOString() ?? null,
+      destinationWalletId: transfer.destinationWalletId,
+      journalId: transfer.ledgerTransactionId,
+      sourceWalletId: transfer.sourceWalletId,
+      status: transfer.status,
+      transferId: transfer.id,
+    }));
+  }
+
+  async listForUser(userId: string): Promise<TransferInspectionDto[]> {
+    return this.listByWhere({ sourceWallet: { userId } });
+  }
+
+  async listForStaff(): Promise<TransferInspectionDto[]> {
+    return this.listByWhere({});
+  }
+
+  private async listByWhere(
+    where: Prisma.TransferWhereInput,
+  ): Promise<TransferInspectionDto[]> {
+    const transfers = await this.prisma.transfer.findMany({
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: 100,
+      where,
+    });
     return transfers.map((transfer) => ({
       amountMinor: transfer.amountMinor.toString(),
       completedAt: transfer.completedAt?.toISOString() ?? null,

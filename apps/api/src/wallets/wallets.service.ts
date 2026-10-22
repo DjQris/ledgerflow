@@ -1,14 +1,18 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 
 import { AuditService } from '../audit/audit.service';
+import { AuthenticatedUser } from '../auth/auth.types';
 import {
   LedgerAccountType,
   LedgerTransactionStatus,
+  UserRole,
+  UserStatus,
 } from '../generated/prisma/enums';
 import { Prisma } from '../generated/prisma/client';
 import { NGN_CURRENCY } from '../ledger/ledger.constants';
@@ -95,6 +99,96 @@ export class WalletsService {
     });
 
     return wallets.map((wallet) => WalletResponseDto.fromRecord(wallet));
+  }
+
+  async createForCustomer(user: AuthenticatedUser): Promise<WalletResponseDto> {
+    if (user.role !== UserRole.CUSTOMER || user.status !== UserStatus.ACTIVE) {
+      throw new ForbiddenException('Access denied');
+    }
+    const id = randomUUID();
+    try {
+      const wallet = await this.prisma.$transaction(async (transaction) => {
+        const owner = await transaction.$queryRaw<{ id: string }[]>`
+          SELECT "id" FROM "users"
+          WHERE "id" = ${user.id}::uuid AND "status" = 'active'
+          FOR UPDATE
+        `;
+        if (owner.length !== 1) throw new ForbiddenException('Access denied');
+        const created = await transaction.wallet.create({
+          data: {
+            currency: NGN_CURRENCY,
+            id,
+            ledgerAccount: {
+              create: {
+                cachedBalanceMinor: 0n,
+                code: `WALLET_${id}`,
+                currency: NGN_CURRENCY,
+                name: `Customer wallet ${id}`,
+                type: LedgerAccountType.WALLET,
+              },
+            },
+            ownerReference: `customer-${user.id}`,
+            userId: user.id,
+          },
+          include: WALLET_WITH_ACCOUNT,
+        });
+        await this.audit.recordSucceeded(transaction, {
+          action: 'wallet_created',
+          actorId: user.id,
+          actorType: 'user',
+          entityId: id,
+          entityType: 'wallet',
+        });
+        return created;
+      });
+      return WalletResponseDto.fromRecord(wallet);
+    } catch (error: unknown) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException('Customer already has a wallet');
+      }
+      throw error;
+    }
+  }
+
+  async findAllForUser(user: AuthenticatedUser): Promise<WalletResponseDto[]> {
+    const wallets = await this.prisma.wallet.findMany({
+      include: WALLET_WITH_ACCOUNT,
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      where: user.role === UserRole.CUSTOMER ? { userId: user.id } : {},
+    });
+    return wallets.map((wallet) => WalletResponseDto.fromRecord(wallet));
+  }
+
+  async findOneForUser(
+    id: string,
+    user: AuthenticatedUser,
+  ): Promise<WalletResponseDto> {
+    const wallet = await this.findWalletRecord({ id });
+    if (!wallet) throw new NotFoundException(`Wallet ${id} was not found`);
+    if (user.role === UserRole.CUSTOMER && wallet.userId !== user.id) {
+      await this.audit.recordRejected({
+        action: 'access_denied',
+        actorId: user.id,
+        actorType: 'user',
+        entityId: wallet.id,
+        entityType: 'wallet',
+        metadata: { reason: 'NOT_OWNER' },
+      });
+      throw new ForbiddenException('Access denied');
+    }
+    return WalletResponseDto.fromRecord(wallet);
+  }
+
+  async getTransactionsForUser(
+    id: string,
+    query: WalletTransactionsQueryDto,
+    user: AuthenticatedUser,
+  ): Promise<WalletTransactionHistoryDto> {
+    await this.findOneForUser(id, user);
+    return this.getTransactions(id, query);
   }
 
   async findOne(id: string): Promise<WalletResponseDto> {

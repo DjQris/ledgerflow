@@ -11,11 +11,12 @@ import { Observable, from, throwError } from 'rxjs';
 import { catchError, mergeMap } from 'rxjs/operators';
 
 import { AuditService } from '../audit/audit.service';
-import { TEST_OWNER_REFERENCE_PATTERN } from '../wallets/dto/create-wallet.dto';
+import { AuthenticatedUser } from '../auth/auth.types';
 import { POSITIVE_MINOR_UNITS_PATTERN } from './dto/transfer.command';
 import { IdempotencyPayloadConflictError } from './errors/idempotency-payload-conflict.error';
 
 interface TransferRequest {
+  authenticatedUser?: AuthenticatedUser;
   body?: unknown;
   headers: Record<string, string | string[] | undefined>;
 }
@@ -45,13 +46,7 @@ export class TransferRejectionAuditInterceptor implements NestInterceptor {
     const sourceWalletId = body.sourceWalletId;
     const destinationWalletId = body.destinationWalletId;
     const amountMinor = body.amountMinor;
-    const rawActor = request.headers['x-simulated-actor'];
-    const actor =
-      typeof rawActor === 'string' &&
-      rawActor.length <= 100 &&
-      TEST_OWNER_REFERENCE_PATTERN.test(rawActor)
-        ? rawActor
-        : undefined;
+    const actor = request.authenticatedUser;
     const key = request.headers['idempotency-key'];
 
     await this.audit.recordRejected({
@@ -59,8 +54,8 @@ export class TransferRejectionAuditInterceptor implements NestInterceptor {
         error instanceof IdempotencyPayloadConflictError
           ? 'idempotency_conflict'
           : 'transfer_rejected',
-      actorId: actor,
-      actorType: actor ? 'simulated_owner' : 'unknown',
+      actorId: actor?.id,
+      actorType: actor ? 'user' : 'unknown',
       entityId:
         typeof sourceWalletId === 'string' && isUUID(sourceWalletId, '4')
           ? sourceWalletId.toLowerCase()

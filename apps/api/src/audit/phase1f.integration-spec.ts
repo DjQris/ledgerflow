@@ -1,11 +1,31 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  ConflictException,
+  Controller,
+  ForbiddenException,
+  Get,
+  Headers,
+  INestApplication,
+  InternalServerErrorException,
+  NotFoundException,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+  UseInterceptors,
+  ValidationPipe,
+} from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
 import { Server } from 'node:http';
 import request from 'supertest';
 
 import { ApiExceptionFilter } from '../common/filters/api-exception.filter';
+import { Public } from '../access-control/decorators/public.decorator';
+import { EnvironmentVariables } from '../config/environment';
 import {
   AuditOutcome,
   LedgerTransactionStatus,
@@ -13,9 +33,113 @@ import {
 } from '../generated/prisma/enums';
 import { LedgerIntegrityService } from '../integrity/ledger-integrity.service';
 import { LedgerService } from '../ledger/ledger.service';
+import { HealthController } from '../health/health.controller';
+import { HealthService } from '../health/health.service';
+import { UsersService } from '../users/users.service';
+import { TransfersService } from '../transfers/transfers.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { TransferCommand } from '../transfers/dto/transfer.command';
+import { TransferInspectionDto } from '../transfers/dto/transfer-http.dto';
+import { TransferError } from '../transfers/errors/transfer.errors';
+import { TransferIdempotencyService } from '../transfers/transfer-idempotency.service';
+import { TransferRejectionAuditInterceptor } from '../transfers/transfer-rejection-audit.interceptor';
 import { TransferResult } from '../transfers/dto/transfer-result.dto';
+import { CreateWalletDto } from '../wallets/dto/create-wallet.dto';
+import { WalletResponseDto } from '../wallets/dto/wallet-response.dto';
+import { WalletTransactionHistoryDto } from '../wallets/dto/wallet-transaction-history.dto';
+import { WalletTransactionsQueryDto } from '../wallets/dto/wallet-transactions-query.dto';
+import { WalletsService } from '../wallets/wallets.service';
 import { AuditEventResponseDto } from './dto/audit-event-response.dto';
+import { AuditQueryDto } from './dto/audit-query.dto';
+import { AuditService } from './audit.service';
+
+// Historical Phase 1 HTTP test adapters. They retain the original simulated
+// workflow as a test fixture; the application controllers never expose it.
+@Public()
+@Controller('wallets')
+class LegacyWalletTestController {
+  constructor(private readonly wallets: WalletsService) {}
+
+  @Post()
+  create(@Body() input: CreateWalletDto): Promise<WalletResponseDto> {
+    return this.wallets.create(input);
+  }
+
+  @Get()
+  list(): Promise<WalletResponseDto[]> {
+    return this.wallets.findAll();
+  }
+
+  @Get(':id')
+  findOne(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+  ): Promise<WalletResponseDto> {
+    return this.wallets.findOne(id);
+  }
+
+  @Get(':id/transactions')
+  history(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Query() query: WalletTransactionsQueryDto,
+  ): Promise<WalletTransactionHistoryDto> {
+    return this.wallets.getTransactions(id, query);
+  }
+}
+
+@Public()
+@Controller('transfers')
+class LegacyTransferTestController {
+  constructor(private readonly idempotency: TransferIdempotencyService) {}
+
+  @Post()
+  @UseInterceptors(TransferRejectionAuditInterceptor)
+  async create(
+    @Body() command: TransferCommand,
+    @Headers('idempotency-key') key: string | undefined,
+    @Headers('x-simulated-actor') actor: string | undefined,
+  ): Promise<TransferResult> {
+    try {
+      return await this.idempotency.submit(command, key, actor);
+    } catch (error: unknown) {
+      if (error instanceof TransferError) {
+        switch (error.code) {
+          case 'INVALID_TRANSFER':
+          case 'SELF_TRANSFER':
+            throw new BadRequestException(error.message);
+          case 'TRANSFER_ACTOR_MISMATCH':
+            throw new ForbiddenException(error.message);
+          case 'WALLET_NOT_FOUND':
+            throw new NotFoundException(error.message);
+          case 'INSUFFICIENT_FUNDS':
+          case 'TRANSFER_CONFLICT':
+          case 'WALLET_UNAVAILABLE':
+            throw new ConflictException(error.message);
+          case 'TRANSFER_PERSISTENCE_FAILURE':
+            throw new InternalServerErrorException(error.message);
+        }
+      }
+      throw error;
+    }
+  }
+
+  @Get()
+  list(
+    @Headers('x-simulated-actor') actor: string | undefined,
+  ): Promise<TransferInspectionDto[]> {
+    return this.idempotency.list(actor);
+  }
+}
+
+@Public()
+@Controller('audit-events')
+class LegacyAuditTestController {
+  constructor(private readonly audit: AuditService) {}
+
+  @Get()
+  list(@Query() query: AuditQueryDto): Promise<AuditEventResponseDto[]> {
+    return this.audit.list(query.limit);
+  }
+}
 
 jest.setTimeout(40_000);
 
@@ -39,9 +163,34 @@ describe('Phase 1 audit and ledger integrity PostgreSQL integration', () => {
     process.env.DATABASE_URL = databaseUrl;
     process.env.NODE_ENV = 'test';
 
-    const { AppModule } = await import('../app.module.js');
+    const config = {
+      get: jest.fn((key: keyof EnvironmentVariables) => {
+        if (key === 'DATABASE_URL') return databaseUrl;
+        if (key === 'NODE_ENV') return 'test';
+        if (key === 'SERVICE_NAME') return 'ledgerflow-api';
+        return undefined;
+      }),
+    } as unknown as ConfigService<EnvironmentVariables, true>;
     const module = await Test.createTestingModule({
-      imports: [AppModule],
+      controllers: [
+        LegacyWalletTestController,
+        LegacyTransferTestController,
+        LegacyAuditTestController,
+        HealthController,
+      ],
+      providers: [
+        { provide: ConfigService, useValue: config },
+        PrismaService,
+        AuditService,
+        UsersService,
+        WalletsService,
+        TransfersService,
+        TransferIdempotencyService,
+        TransferRejectionAuditInterceptor,
+        LedgerService,
+        LedgerIntegrityService,
+        HealthService,
+      ],
     }).compile();
     app = module.createNestApplication();
     app.setGlobalPrefix('api/v1');

@@ -1,10 +1,14 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
 import { resolve } from 'node:path';
 
 import { AuditModule } from './audit/audit.module';
 import { AccessControlModule } from './access-control/access-control.module';
 import { AuthModule } from './auth/auth.module';
+import { RolesGuard } from './access-control/guards/roles.guard';
+import { AuthenticationGuard } from './auth/guards/authentication.guard';
+import { AuthOriginGuard } from './auth/guards/auth-origin.guard';
 import { validateEnvironment } from './config/environment';
 import { HealthModule } from './health/health.module';
 import { LedgerIntegrityModule } from './integrity/ledger-integrity.module';
@@ -37,6 +41,11 @@ import { WalletsModule } from './wallets/wallets.module';
     LedgerModule,
     WalletsModule,
     TransfersModule,
+  ],
+  providers: [
+    { provide: APP_GUARD, useClass: AuthenticationGuard },
+    { provide: APP_GUARD, useClass: AuthOriginGuard },
+    { provide: APP_GUARD, useClass: RolesGuard },
   ],
 })
 export class AppModule {}

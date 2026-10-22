@@ -35,6 +35,8 @@ interface LockedWallet {
   cachedBalanceMinor: bigint;
   currency: string;
   ownerReference: string;
+  userId: string;
+  userStatus: string;
   status: string;
   walletId: string;
 }
@@ -93,6 +95,7 @@ export class TransfersService {
     command: ValidatedTransferCommand,
     idempotencyRecordId?: string,
     actor?: string,
+    actorUserId?: string,
   ): Promise<TransferResult> {
     const lockedWallets = new Map<string, LockedWallet>();
     const walletIds = [
@@ -121,6 +124,13 @@ export class TransfersService {
     this.assertWalletAvailable(destinationWallet);
 
     if (actor && sourceWallet.ownerReference !== actor) {
+      throw new TransferActorMismatchError();
+    }
+    if (
+      actorUserId &&
+      (sourceWallet.userId !== actorUserId ||
+        sourceWallet.userStatus !== 'active')
+    ) {
       throw new TransferActorMismatchError();
     }
 
@@ -188,8 +198,12 @@ export class TransfersService {
 
     await this.audit.recordSucceeded(transaction, {
       action: 'transfer_completed',
-      actorId: actor,
-      actorType: actor ? 'simulated_owner' : 'internal_service',
+      actorId: actorUserId ?? actor,
+      actorType: actorUserId
+        ? 'user'
+        : actor
+          ? 'simulated_owner'
+          : 'internal_service',
       entityId: transferId,
       entityType: 'transfer',
       metadata: {
@@ -244,12 +258,15 @@ export class TransfersService {
         wallet."status"::text AS "status",
         wallet."currency" AS "currency",
         wallet."owner_reference" AS "ownerReference",
+        wallet."user_id" AS "userId",
+        owner."status"::text AS "userStatus",
         account."id" AS "accountId",
         account."cached_balance_minor" AS "cachedBalanceMinor"
       FROM "wallets" AS wallet
       JOIN "ledger_accounts" AS account ON account."wallet_id" = wallet."id"
+      JOIN "users" AS owner ON owner."id" = wallet."user_id"
       WHERE wallet."id" = ${walletId}::uuid
-      FOR UPDATE OF wallet, account
+      FOR UPDATE OF wallet, account, owner
     `);
 
     return rows[0] ?? null;
