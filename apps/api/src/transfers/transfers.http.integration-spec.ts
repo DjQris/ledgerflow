@@ -16,6 +16,7 @@ import {
 import { LedgerService } from '../ledger/ledger.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { WalletsService } from '../wallets/wallets.service';
+import { UsersService } from '../users/users.service';
 import { LocalSimulationGuard } from '../common/guards/local-simulation.guard';
 import { TransferIdempotencyService } from './transfer-idempotency.service';
 import { TransferRejectionAuditInterceptor } from './transfer-rejection-audit.interceptor';
@@ -99,7 +100,7 @@ describe('Transfer HTTP idempotency PostgreSQL integration', () => {
     await app.init();
     prisma = app.get(PrismaService);
     const audit = app.get(AuditService);
-    wallets = new WalletsService(prisma, audit);
+    wallets = new WalletsService(prisma, audit, new UsersService());
     ledger = new LedgerService(prisma, config, audit);
   }
 

@@ -1,6 +1,7 @@
 import { AuditService } from '../audit/audit.service';
 import { WalletStatus } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
+import { UsersService } from '../users/users.service';
 import { WalletsService } from './wallets.service';
 
 const CREATED_AT = new Date('2026-10-21T17:00:00.000Z');
@@ -22,6 +23,7 @@ describe('WalletsService', () => {
   it('creates an NGN wallet and its zero-balance ledger account atomically', async () => {
     const transaction = {
       auditEvent: { create: jest.fn().mockResolvedValue({}) },
+      user: { create: jest.fn().mockResolvedValue({ id: WALLET_ID }) },
       wallet: { create: jest.fn().mockResolvedValue(walletRecord(0n)) },
     };
     const prisma = {
@@ -30,7 +32,11 @@ describe('WalletsService', () => {
           operation(transaction),
       ),
     } as unknown as PrismaService;
-    const service = new WalletsService(prisma, new AuditService(prisma));
+    const service = new WalletsService(
+      prisma,
+      new AuditService(prisma),
+      new UsersService(),
+    );
 
     const result = await service.create({ ownerReference: 'test-alice' });
 
@@ -51,9 +57,21 @@ describe('WalletsService', () => {
             }) as object,
           },
           ownerReference: 'test-alice',
+          userId: WALLET_ID,
         }) as object,
       }),
     );
+    expect(transaction.user.create).toHaveBeenCalledWith({
+      data: {
+        email: expect.stringMatching(
+          /^simulated-[0-9a-f-]{36}@ledgerflow\.invalid$/,
+        ) as string,
+        id: expect.any(String) as string,
+        role: 'CUSTOMER',
+        status: 'SUSPENDED',
+      },
+      select: { id: true },
+    });
     expect(transaction.auditEvent.create).toHaveBeenCalledTimes(1);
   });
 
@@ -65,7 +83,11 @@ describe('WalletsService', () => {
           .mockResolvedValue(walletRecord(9_007_199_254_740_993n)),
       },
     } as unknown as PrismaService;
-    const service = new WalletsService(prisma, new AuditService(prisma));
+    const service = new WalletsService(
+      prisma,
+      new AuditService(prisma),
+      new UsersService(),
+    );
 
     const result = await service.findOne(WALLET_ID);
 

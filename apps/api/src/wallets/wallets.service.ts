@@ -13,6 +13,7 @@ import {
 import { Prisma } from '../generated/prisma/client';
 import { NGN_CURRENCY } from '../ledger/ledger.constants';
 import { PrismaService } from '../prisma/prisma.service';
+import { UsersService } from '../users/users.service';
 import { CreateWalletDto } from './dto/create-wallet.dto';
 import { WalletResponseDto } from './dto/wallet-response.dto';
 import {
@@ -30,6 +31,7 @@ export class WalletsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly users: UsersService,
   ) {}
 
   async create(input: CreateWalletDto): Promise<WalletResponseDto> {
@@ -37,6 +39,10 @@ export class WalletsService {
 
     try {
       const wallet = await this.prisma.$transaction(async (transaction) => {
+        const userId = await this.users.provisionForSimulatedWallet(
+          transaction,
+          walletId,
+        );
         const createdWallet = await transaction.wallet.create({
           data: {
             currency: NGN_CURRENCY,
@@ -51,6 +57,7 @@ export class WalletsService {
               },
             },
             ownerReference: input.ownerReference,
+            userId,
           },
           include: WALLET_WITH_ACCOUNT,
         });

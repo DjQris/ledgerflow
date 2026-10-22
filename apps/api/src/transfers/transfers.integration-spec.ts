@@ -11,6 +11,7 @@ import {
 import { LedgerService } from '../ledger/ledger.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { WalletsService } from '../wallets/wallets.service';
+import { UsersService } from '../users/users.service';
 import {
   InsufficientFundsError,
   TransferPersistenceError,
@@ -53,7 +54,7 @@ describe('TransfersService PostgreSQL integration', () => {
     prisma = new PrismaService(config);
     await prisma.onModuleInit();
     const audit = new AuditService(prisma);
-    wallets = new WalletsService(prisma, audit);
+    wallets = new WalletsService(prisma, audit, new UsersService());
     ledger = new LedgerService(prisma, config, audit);
     transfers = new TransfersService(prisma, audit);
   });

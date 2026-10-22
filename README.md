@@ -30,6 +30,8 @@ The defaults in `.env.example` are safe for local development. Keep real secrets
 
 `db:seed` is restricted to local and test environments. It creates the simulated `test-ada` and `test-tobi` NGN wallets and posts balanced development opening-funding journals. It is safe to rerun: stable owner and external references prevent duplicate wallets or opening balances.
 
+Phase 2A also creates a suspended, passwordless provisional `User` for each seeded or newly simulated wallet. No development login password is shipped or required.
+
 ## Start the API
 
 ```bash
@@ -58,6 +60,14 @@ Phase 1C exposes wallet management under `/api/v1/wallets`:
 - `GET /api/v1/wallets/:id/transactions?page=1&pageSize=20` returns paginated posted transaction history.
 
 There is intentionally no public funding endpoint. Development opening balances are created only by `npm run db:seed` as balanced ledger journals.
+
+## Phase 2A identity preparation
+
+The database now contains `User`, `AuthSession`, and `RefreshToken` models. Every wallet has a required `userId` foreign key. Existing wallet IDs, balances, journals, transfers, and audit events are preserved. The migration creates one provisional customer user per existing wallet, using the wallet UUID as the user UUID and a unique `simulated-<wallet-uuid>@ledgerflow.invalid` address. These users are suspended and have `passwordHash = NULL`; they cannot be used to sign in. New simulated wallets provision the same kind of user in the wallet-creation transaction. The legacy `ownerReference` remains for Phase 1 API compatibility.
+
+`auth/`, `access-control/`, and `security/` are module boundaries only. There are no authentication endpoints, sessions in use, access tokens, role guards, or changes to transfer authorization yet. `.env.example` reserves future authentication settings but includes no signing key or user passwords. Do not activate or reuse provisional identities without an explicit enrollment and credential-setting flow in a later phase.
+
+For an existing database, take a recoverable backup, stop the old API, run `npm run db:migrate:deploy`, regenerate Prisma Client, then start the updated API. The Phase 2A migration runs in a PostgreSQL transaction, backfills all existing wallets, verifies ownership is complete, and only then sets `wallets.user_id` to `NOT NULL` and adds its foreign key. Old API instances cannot create wallets after the new constraint is in place, so do not run old and new versions together during this migration. See [the identity migration notes](docs/phase2a-identity-migration.md) for verification queries and compatibility risks.
 
 ## Local transfer simulation
 
@@ -93,7 +103,7 @@ npm run ledger:verify
 
 Run `npm run format` to apply Prettier formatting.
 
-Integration and concurrency tests require `INTEGRATION_DATABASE_URL` to reference a dedicated database named `ledgerflow_phase1f_integration_*` with the committed migrations applied. For the default local PostgreSQL container:
+Integration and concurrency tests require `INTEGRATION_DATABASE_URL` to reference a dedicated database named `ledgerflow_phase1f_integration_*` with the committed migrations applied. This historical test-database prefix is retained for all Phase 1 and 2A suites. For the default local PostgreSQL container:
 
 ```bash
 docker exec ledgerflow-database-1 createdb -U ledgerflow ledgerflow_phase1f_integration_local
@@ -127,10 +137,10 @@ ledgerflow/
 └── package.json   # Workspace scripts
 ```
 
-The API includes application configuration, shared HTTP exception handling, health, wallet management, an internal ledger service, and a global Prisma module. The financial schema and its source-of-truth and immutability rules are documented in [docs/financial-data-model.md](docs/financial-data-model.md).
+The API includes application configuration, shared HTTP exception handling, health, wallet management, an internal ledger service, a global Prisma module, and the Phase 2A `users/`, `auth/`, `access-control/`, and `security/` modules. The financial schema and its source-of-truth and immutability rules are documented in [docs/financial-data-model.md](docs/financial-data-model.md).
 
 The transfer engine uses deterministic PostgreSQL row locks and one interactive transaction for every financial write. The Phase 1E API reserves a database unique `(scope, key)` row and completes that row and the transfer in the same transaction. Concurrent duplicate requests wait for the first transaction and replay its saved result; no in-memory lock or cache is used.
 
 Phase 1F records successful operations atomically with their financial writes and records rejected transfers separately. `AuditEvent` rows are append-only. The integrity command provides an independent check of posted journal and wallet projection invariants.
 
-Current limits: actors are simulated, transfers and audit inspection work only locally, funding is seed-only, and inspection endpoints return at most 100 rows. There are no real payment rails, authentication, frontend, or deployment features. Before Phase 2, introduce identity and authorization, decide audit retention and idempotency expiry policies, and load-test the transaction path under expected traffic.
+Current limits: actors are simulated, transfers and audit inspection work only locally, funding is seed-only, and inspection endpoints return at most 100 rows. There are no real payment rails, active authentication, frontend, or deployment features. Before activating authentication, design secure registration or migration of provisional identities, password hashing, session and refresh-token rotation, role enforcement, and audit retention; also load-test the transaction path under expected traffic.
