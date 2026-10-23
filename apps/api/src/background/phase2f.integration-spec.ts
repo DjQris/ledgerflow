@@ -16,6 +16,7 @@ import { UsersService } from '../users/users.service';
 import { WalletsService } from '../wallets/wallets.service';
 import { redisConnection } from './background-environment';
 import { DispatcherService } from './dispatcher.service';
+import { FailureService } from './failure.service';
 import { NotificationService } from './notification.service';
 import { TRANSFER_EVENTS_QUEUE } from './queue.module';
 
@@ -59,6 +60,11 @@ describe('Phase 2F BullMQ delivery', () => {
     outbox = dispatcherApp.get(OutboxService);
     dispatcher = dispatcherApp.get(DispatcherService);
     queue = dispatcherApp.get<Queue>(getQueueToken(TRANSFER_EVENTS_QUEUE));
+    expect(queue.opts.defaultJobOptions).toMatchObject({
+      attempts: 5,
+      removeOnComplete: false,
+      removeOnFail: false,
+    });
     const config =
       dispatcherApp.get<ConfigService<EnvironmentVariables, true>>(
         ConfigService,
@@ -101,10 +107,13 @@ describe('Phase 2F BullMQ delivery', () => {
     `;
     expect(events).toHaveLength(1);
     const eventId = events[0].id;
-    // This test event is first in the claim order even when other suites left
-    // unpublished events in the disposable integration database.
+    // Keep this event first even after repeated runs leave older pending test rows.
     await prisma.$executeRaw`
-      UPDATE "outbox_events" SET "created_at" = '2020-01-01'::timestamptz
+      UPDATE "outbox_events" SET "created_at" = (
+        SELECT COALESCE(MIN("created_at") - INTERVAL '1 second',
+          '2020-01-01'::timestamptz)
+        FROM "outbox_events" WHERE "id" <> ${eventId}::uuid
+      )
       WHERE "id" = ${eventId}::uuid
     `;
     const walletRows = await prisma.$queryRaw<Array<{ userId: string }>>`
@@ -203,7 +212,11 @@ describe('Phase 2F BullMQ delivery', () => {
 
   it('fences competing dispatchers and retains a single stable job ID', async () => {
     const event = await createTransfer('competing');
-    const other = new DispatcherService(outbox, queue);
+    const other = new DispatcherService(
+      outbox,
+      queue,
+      dispatcherApp.get(FailureService),
+    );
     await Promise.all([dispatcher.dispatchBatch(1), other.dispatchBatch(1)]);
     const job = await queue.getJob(event.eventId);
     expect(job?.id).toBe(event.eventId);
@@ -225,7 +238,11 @@ describe('Phase 2F BullMQ delivery', () => {
     unavailable.on('error', () => undefined);
     const event = await createTransfer('redis-outage');
     try {
-      const isolated = new DispatcherService(outbox, unavailable);
+      const isolated = new DispatcherService(
+        outbox,
+        unavailable,
+        dispatcherApp.get(FailureService),
+      );
       expect(await isolated.dispatchBatch(1)).toMatchObject({
         claimed: 1,
         retried: 1,

@@ -39,6 +39,7 @@ async function bootstrap(): Promise<void> {
     .addTag('wallets')
     .addTag('transfers')
     .addTag('audit')
+    .addTag('operations')
     .addTag('auth')
     .addCookieAuth(
       'ledgerflow_access',

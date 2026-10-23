@@ -21,17 +21,27 @@ export class QueueModule {
             connection: redisConnection(
               config.get('REDIS_URL', { infer: true }),
               role,
+              config.get('REDIS_CONNECT_TIMEOUT_MS', { infer: true }),
             ),
           }),
         }),
-        BullModule.registerQueue({
+        BullModule.registerQueueAsync({
           name: TRANSFER_EVENTS_QUEUE,
-          defaultJobOptions: {
-            attempts: 100,
-            backoff: { type: 'fixed', delay: 5_000 },
-            removeOnComplete: false,
-            removeOnFail: false,
-          },
+          inject: [ConfigService],
+          useFactory: (config: ConfigService<BackgroundEnvironment, true>) => ({
+            defaultJobOptions: {
+              attempts: config.get('BACKGROUND_JOB_MAX_ATTEMPTS', {
+                infer: true,
+              }),
+              backoff: {
+                type: 'exponential',
+                delay: config.get('BACKGROUND_RETRY_DELAY_MS', { infer: true }),
+                jitter: 0.5,
+              },
+              removeOnComplete: false,
+              removeOnFail: false,
+            },
+          }),
         }),
       ],
       exports: [BullModule],

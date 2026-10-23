@@ -6,6 +6,7 @@ import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 
 import { AuditModule } from './audit/audit.module';
+import { OpsJobsModule } from './background/ops-jobs.module';
 import { AccessControlModule } from './access-control/access-control.module';
 import { AuthModule } from './auth/auth.module';
 import { RolesGuard } from './access-control/guards/roles.guard';
@@ -66,6 +67,7 @@ import { WalletsModule } from './wallets/wallets.module';
     AccessControlModule,
     SecurityModule,
     AuditModule,
+    OpsJobsModule,
     LedgerIntegrityModule,
     HealthModule,
     LedgerModule,

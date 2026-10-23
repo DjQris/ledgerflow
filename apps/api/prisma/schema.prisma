@@ -68,6 +68,7 @@ enum OutboxStatus {
   PENDING   @map("pending")
   CLAIMED   @map("claimed")
   PUBLISHED @map("published")
+  DEAD_LETTER @map("dead_letter")
 
   @@map("outbox_status")
 }
@@ -319,4 +320,25 @@ model TransactionNotification {
   @@index([recipientUserId, createdAt])
   @@index([transferId])
   @@map("transaction_notifications")
+}
+
+model FailedBackgroundJob {
+  id               String   @id @default(uuid()) @db.Uuid
+  eventId          String   @map("event_id") @db.VarChar(100)
+  jobId            String   @map("job_id") @db.VarChar(150)
+  source           String   @db.VarChar(20)
+  failureCategory  String   @map("failure_category") @db.VarChar(20)
+  failureReason    String   @map("failure_reason") @db.VarChar(100)
+  attempts         Int
+  runAttempts      Int      @default(0) @map("run_attempts")
+  firstFailureAt   DateTime @map("first_failure_at") @db.Timestamptz(6)
+  lastFailureAt    DateTime @map("last_failure_at") @db.Timestamptz(6)
+  status           String   @db.VarChar(20)
+  retryActorId     String?  @map("retry_actor_id") @db.Uuid
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([status, lastFailureAt])
+  @@index([eventId])
+  @@unique([source, jobId])
+  @@map("failed_background_jobs")
 }

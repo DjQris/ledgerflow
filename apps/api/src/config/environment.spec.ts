@@ -42,6 +42,7 @@ describe('authentication environment validation', () => {
       AUTH_SIGNING_KEY: signingKey,
       DATABASE_URL: databaseUrl,
       NODE_ENV: 'production',
+      REDIS_URL: 'rediss://cache.example:6379',
     });
     expect(valid.AUTH_COOKIE_SECURE).toBe(true);
   });
@@ -108,6 +109,7 @@ describe('authentication environment validation', () => {
       AUTH_SIGNING_KEY: signingKey,
       AUTH_ALLOWED_ORIGIN: 'https://app.example',
       CORS_ALLOWED_ORIGINS: 'https://app.example, https://admin.example',
+      REDIS_URL: 'rediss://cache.example:6379',
     });
     expect(valid.CORS_ALLOWED_ORIGINS).toEqual([
       'https://app.example',

@@ -1,8 +1,11 @@
 import { RedisOptions } from 'bullmq';
 
 export interface BackgroundEnvironment {
+  BACKGROUND_JOB_MAX_ATTEMPTS: number;
+  BACKGROUND_RETRY_DELAY_MS: number;
   DATABASE_URL: string;
   NODE_ENV: 'development' | 'test' | 'production';
+  REDIS_CONNECT_TIMEOUT_MS: number;
   REDIS_URL: string;
 }
 
@@ -34,10 +37,45 @@ export function validateBackgroundEnvironment(
     throw new Error('Production REDIS_URL must use rediss://');
   }
   return {
+    BACKGROUND_JOB_MAX_ATTEMPTS: boundedInteger(
+      values.BACKGROUND_JOB_MAX_ATTEMPTS,
+      5,
+      1,
+      20,
+      'BACKGROUND_JOB_MAX_ATTEMPTS',
+    ),
+    BACKGROUND_RETRY_DELAY_MS: boundedInteger(
+      values.BACKGROUND_RETRY_DELAY_MS,
+      1_000,
+      100,
+      60_000,
+      'BACKGROUND_RETRY_DELAY_MS',
+    ),
     DATABASE_URL: databaseUrl,
     NODE_ENV: nodeEnv as BackgroundEnvironment['NODE_ENV'],
+    REDIS_CONNECT_TIMEOUT_MS: boundedInteger(
+      values.REDIS_CONNECT_TIMEOUT_MS,
+      2_000,
+      500,
+      30_000,
+      'REDIS_CONNECT_TIMEOUT_MS',
+    ),
     REDIS_URL: redisUrl,
   };
+}
+
+export function boundedInteger(
+  value: unknown,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+  name: string,
+): number {
+  const parsed = value === undefined ? fallback : Number(value);
+  if (!Number.isInteger(parsed) || parsed < minimum || parsed > maximum) {
+    throw new Error(`${name} must be an integer from ${minimum} to ${maximum}`);
+  }
+  return parsed;
 }
 
 function isUrl(
@@ -61,6 +99,7 @@ function isUrl(
 export function redisConnection(
   redisUrl: string,
   role: 'dispatcher' | 'worker',
+  connectTimeout = 2_000,
 ): RedisOptions {
   const url = new URL(redisUrl);
   return {
@@ -69,7 +108,7 @@ export function redisConnection(
     username: url.username ? decodeURIComponent(url.username) : undefined,
     password: url.password ? decodeURIComponent(url.password) : undefined,
     tls: url.protocol === 'rediss:' ? {} : undefined,
-    connectTimeout: 2_000,
+    connectTimeout,
     enableOfflineQueue: role === 'worker',
     maxRetriesPerRequest: role === 'worker' ? null : 1,
     retryStrategy:

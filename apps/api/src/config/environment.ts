@@ -1,8 +1,13 @@
+import {
+  BackgroundEnvironment,
+  validateBackgroundEnvironment,
+} from '../background/background-environment';
+
 const NODE_ENVIRONMENTS = ['development', 'test', 'production'] as const;
 
 export type NodeEnvironment = (typeof NODE_ENVIRONMENTS)[number];
 
-export interface EnvironmentVariables {
+export interface EnvironmentVariables extends BackgroundEnvironment {
   AUTH_ACCESS_TOKEN_TTL_SECONDS: number;
   AUTH_ALLOWED_ORIGIN: string;
   AUTH_AUDIENCE: string;
@@ -13,8 +18,6 @@ export interface EnvironmentVariables {
   AUTH_SIGNING_KEY: string | null;
   CORS_ALLOWED_ORIGINS: string[];
   REQUEST_BODY_LIMIT_BYTES: number;
-  DATABASE_URL: string;
-  NODE_ENV: NodeEnvironment;
   PORT: number;
   SERVICE_NAME: string;
 }
@@ -177,6 +180,7 @@ export function validateEnvironment(
   }
 
   return {
+    ...validateBackgroundEnvironment(values),
     AUTH_ACCESS_TOKEN_TTL_SECONDS: accessTtl,
     AUTH_ALLOWED_ORIGIN: allowedOrigin.origin,
     AUTH_AUDIENCE: audience.trim(),
@@ -187,8 +191,6 @@ export function validateEnvironment(
     AUTH_SIGNING_KEY: normalizedSigningKey,
     CORS_ALLOWED_ORIGINS: [...new Set(corsOrigins)],
     REQUEST_BODY_LIMIT_BYTES: bodyLimit,
-    DATABASE_URL: databaseUrl,
-    NODE_ENV: nodeEnvironment as NodeEnvironment,
     PORT: port,
     SERVICE_NAME: serviceName.trim(),
   };

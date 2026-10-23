@@ -46,4 +46,25 @@ describe('background environment', () => {
     expect(worker.maxRetriesPerRequest).toBeNull();
     expect(worker.tls).toEqual({});
   });
+
+  it('bounds job attempts, retry delay, and connection timeout', () => {
+    const config = validateBackgroundEnvironment({ DATABASE_URL: databaseUrl });
+    expect(config).toMatchObject({
+      BACKGROUND_JOB_MAX_ATTEMPTS: 5,
+      BACKGROUND_RETRY_DELAY_MS: 1_000,
+      REDIS_CONNECT_TIMEOUT_MS: 2_000,
+    });
+    expect(() =>
+      validateBackgroundEnvironment({
+        DATABASE_URL: databaseUrl,
+        BACKGROUND_JOB_MAX_ATTEMPTS: 0,
+      }),
+    ).toThrow('BACKGROUND_JOB_MAX_ATTEMPTS');
+    expect(() =>
+      validateBackgroundEnvironment({
+        DATABASE_URL: databaseUrl,
+        BACKGROUND_RETRY_DELAY_MS: 0,
+      }),
+    ).toThrow('BACKGROUND_RETRY_DELAY_MS');
+  });
 });

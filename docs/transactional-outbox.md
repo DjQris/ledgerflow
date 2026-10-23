@@ -19,11 +19,16 @@ after external delivery but before acknowledgement may cause another delivery;
 consumers must deduplicate using `eventId`. This design guarantees a durable
 event row, not exactly-once external delivery.
 
-Retention is deliberately manual for now. Do **not** delete pending or claimed
-events. Before production use, set a reviewed retention period for
-published rows (for example 90 days), ensure consumer replay windows and backup
+Phase 2G quarantines permanently invalid rows as `dead_letter`, recording a
+sanitized, durable [failure record](phase2g-failure-recovery.md). Operations
+staff can inspect and requeue a repaired event; neither this action nor the
+worker repeats the financial transfer.
+
+Retention is deliberately manual for now. Do **not** delete pending, claimed,
+or dead-letter events. Before production use, set a reviewed retention period
+for published rows (for example 90 days), ensure consumer replay windows and backup
 retention fit within it, and implement a separately audited, batched purge of
-published rows only. Limit database access to the API and future dispatcher
+published rows only. Limit database access to the API and dispatcher
 roles; do not expose the payload through a public HTTP endpoint or copy it into
 request logs. Review each new event version for data minimization and any
 personal-data retention obligations before release. Backups containing outbox

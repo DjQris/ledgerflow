@@ -7,6 +7,7 @@ import {
   parseTransferCompletedPayload,
 } from '../outbox/outbox-events';
 import { PrismaService } from '../prisma/prisma.service';
+import { PermanentJobError } from './failure-classification';
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -27,7 +28,7 @@ export class NotificationService {
   constructor(private readonly prisma: PrismaService) {}
 
   async recordTransferCompletion(eventId: string): Promise<ProcessingResult> {
-    if (!UUID_PATTERN.test(eventId)) throw new Error('Invalid event ID');
+    if (!UUID_PATTERN.test(eventId)) throw new PermanentJobError('INVALID_JOB');
     return this.prisma.$transaction(
       async (transaction) => {
         const rows = await transaction.$queryRaw<StoredCompletion[]>(Prisma.sql`
@@ -44,19 +45,25 @@ export class NotificationService {
             AND transfer."status" = 'completed'
         `);
         const completion = rows[0];
-        if (!completion || rows.length !== 1 || completion.eventVersion !== 1) {
-          throw new Error('Transfer completion event is unavailable');
+        if (!completion || rows.length !== 1) {
+          throw new PermanentJobError('EVENT_DATA_UNAVAILABLE');
         }
-        const payload = parseTransferCompletedPayload(completion.payload);
+        if (completion.eventVersion !== 1) {
+          throw new PermanentJobError('UNSUPPORTED_EVENT_VERSION');
+        }
+        let payload;
+        try {
+          payload = parseTransferCompletedPayload(completion.payload);
+        } catch {
+          throw new PermanentJobError('INVALID_EVENT_PAYLOAD');
+        }
         if (
           payload.eventId !== eventId ||
           payload.transferId !== completion.transferId ||
           completion.aggregateId !== completion.transferId ||
           completion.eventType !== TRANSFER_COMPLETED_TYPE
         ) {
-          throw new Error(
-            'Transfer completion event does not match its aggregate',
-          );
+          throw new PermanentJobError('EVENT_MISMATCH');
         }
 
         const reserved = await transaction.$queryRaw<

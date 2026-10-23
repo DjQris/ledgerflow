@@ -3,8 +3,9 @@
 Start local PostgreSQL and Redis with `npm run db:up` and `npm run redis:up`,
 apply migrations, then build the API. Run `npm run start:prod`,
 `npm run start:dispatcher`, and `npm run start:worker` in separate terminals.
-The dispatcher and worker need `DATABASE_URL` and `REDIS_URL`; the HTTP API
-does not need Redis. Production Redis must use a private `rediss://` URL with
+The dispatcher and worker need `DATABASE_URL` and `REDIS_URL`; since Phase 2G,
+the HTTP API also needs Redis for the protected manual-retry route, though
+financial HTTP requests never use it. Production Redis must use a private `rediss://` URL with
 credentials supplied outside Git. Local Compose publishes Redis on loopback
 only and uses an AOF-backed volume. The three processes handle SIGINT/SIGTERM
 and close their database and Redis connections gracefully.
@@ -32,8 +33,8 @@ continue deduplicating while outbox entries exist. Redis must be configured
 for durable persistence in deployment; a volatile Redis acknowledged write
 could otherwise be lost after the outbox row is marked published. Delivery is
 at least once, not exactly once. Worker jobs retry transient failures with
-BullMQ backoff; exhausted failures remain visible in Redis for operator
-investigation. There is no retry-management API in this phase. Retention for
+BullMQ backoff; Phase 2G persists exhausted failures in PostgreSQL and adds
+protected [failure recovery](phase2g-failure-recovery.md). Retention for
 published outbox rows, processed-event identities, notifications, and BullMQ
 jobs needs a coordinated policy before production rollout. Do not discard
 processed-event identities while old jobs can be redelivered.

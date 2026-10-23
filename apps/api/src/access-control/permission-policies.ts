@@ -7,6 +7,7 @@ export const PermissionPolicies = {
   walletRead: [UserRole.CUSTOMER, UserRole.OPERATIONS, UserRole.ADMIN],
   transferRead: [UserRole.CUSTOMER, UserRole.OPERATIONS, UserRole.ADMIN],
   auditRead: [UserRole.OPERATIONS, UserRole.ADMIN],
+  backgroundOperations: [UserRole.OPERATIONS, UserRole.ADMIN],
   userAdmin: [UserRole.ADMIN],
   identityRead: [UserRole.CUSTOMER, UserRole.OPERATIONS, UserRole.ADMIN],
 } as const;
