@@ -3,6 +3,9 @@
 LedgerFlow is an npm-workspace monorepo containing a NestJS API and a PostgreSQL/Prisma ledger. `apps/web` is reserved for a future application and is not scaffolded. See the [architecture diagram](docs/architecture.md) and [financial data model](docs/financial-data-model.md).
 
 The stack is TypeScript, NestJS, PostgreSQL 18, Prisma, Jest, and Supertest. Swagger documents the HTTP API.
+The current major versions are NestJS 12, Prisma 7.10, BullMQ 6, TypeScript 5.9,
+Jest 30, and Supertest 7. Local Compose uses PostgreSQL 18 and Redis 7.4;
+Node.js 24 LTS is recommended. The lockfile selects exact npm package versions.
 
 ## Prerequisites
 
@@ -42,6 +45,7 @@ npm run start:dev
 The development server exposes:
 
 - Health check: <http://localhost:3000/api/v1/health>
+- Database readiness: <http://localhost:3000/api/v1/health/ready>
 - Swagger UI: <http://localhost:3000/docs>
 
 For a compiled local run:
@@ -57,6 +61,15 @@ Run the dispatcher and worker independently in two more terminals after `npm run
 npm run start:dispatcher
 npm run start:worker
 ```
+
+Each background process serves loopback-only `/live` and `/ready` probes: the
+dispatcher defaults to `127.0.0.1:3101`, and the worker to `127.0.0.1:3102`.
+Their ports are configurable with `DISPATCHER_HEALTH_PORT` and
+`WORKER_HEALTH_PORT`. Readiness requires PostgreSQL and Redis; worker readiness
+also requires its BullMQ processor to be running. The API's readiness check
+requires PostgreSQL but deliberately does not require Redis, so financial
+transfers can continue while outbox delivery is delayed. See the
+[operations runbook](docs/operations.md) for probes and measurements.
 
 Financial HTTP requests do not connect to Redis. Phase 2G's protected manual-retry operation does, so the API, dispatcher, and worker all need `REDIS_URL`; production requires a private `rediss://` endpoint. See [background workers](docs/phase2f-background-workers.md) and [failure recovery](docs/phase2g-failure-recovery.md). Redis is bound to loopback in local Compose and must not be exposed publicly.
 
@@ -166,9 +179,16 @@ ledgerflow/
 └── package.json   # Workspace scripts
 ```
 
+Within `apps/api/src`, `auth/` and `security/` own sessions and CSRF,
+`access-control/` owns RBAC and admin actions, `wallets/`, `ledger/`, and
+`transfers/` own financial workflows, `outbox/` and `background/` own durable
+delivery and recovery, `audit/` and `integrity/` provide verification, and
+`health/` provides API liveness/readiness. `main-dispatcher.ts` and
+`main-worker.ts` are separate process entry points.
+
 The API includes application configuration, shared HTTP exception handling, health, wallet management, an internal ledger service, a global Prisma module, Phase 2A identity ownership, Phase 2B authentication/session services, and Phase 2C role/resource authorization. The financial schema and its source-of-truth and immutability rules are documented in [docs/financial-data-model.md](docs/financial-data-model.md).
 
-Phase 2E adds a [transactional outbox](docs/transactional-outbox.md): completed transfers persist one minimal, versioned event atomically with their ledger and audit writes. Phase 2F adds a separate [BullMQ dispatcher and worker](docs/phase2f-background-workers.md) that turn committed events into deduplicated internal notification records. Phase 2G adds bounded retries, durable [failure recovery](docs/phase2g-failure-recovery.md), and protected operations endpoints. No real SMS/email provider or frontend dashboard is included.
+Phase 2E adds a [transactional outbox](docs/transactional-outbox.md): completed transfers persist one minimal, versioned event atomically with their ledger and audit writes. Phase 2F adds a separate [BullMQ dispatcher and worker](docs/phase2f-background-workers.md) that turn committed events into deduplicated internal notification records. Phase 2G adds bounded retries, durable [failure recovery](docs/phase2g-failure-recovery.md), and protected operations endpoints. Phase 2H adds [verification and observability](docs/phase2h-verification.md), with a [Phase 3 API contract](docs/frontend-integration-contract.md). No real SMS/email provider or frontend dashboard is included.
 
 The transfer engine uses deterministic PostgreSQL row locks and one interactive transaction for every financial write. The Phase 1E API reserves a database unique `(scope, key)` row and completes that row and the transfer in the same transaction. Concurrent duplicate requests wait for the first transaction and replay its saved result; no in-memory lock or cache is used.
 

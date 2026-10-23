@@ -130,7 +130,10 @@ export class TransferCompletedProcessor
             'worker',
             safeJobId(job.id),
           );
-          if (existing) continue;
+          // The failure hook may have persisted an earlier retry but missed the
+          // terminal transition while PostgreSQL was unavailable. Reconcile
+          // that row as well as jobs with no durable record at all.
+          if (existing && existing.status !== 'retrying') continue;
           const permanent = job.stacktrace?.some((entry) =>
             entry.includes('UnrecoverableError'),
           );

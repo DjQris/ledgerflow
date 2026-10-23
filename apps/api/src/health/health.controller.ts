@@ -1,5 +1,11 @@
-import { Controller, Get } from '@nestjs/common';
-import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Controller, Get, Res } from '@nestjs/common';
+import {
+  ApiOkResponse,
+  ApiOperation,
+  ApiServiceUnavailableResponse,
+  ApiTags,
+} from '@nestjs/swagger';
+import type { Response } from 'express';
 import { Public } from '../access-control/decorators/public.decorator';
 
 import type { HealthResponse } from './health.service';
@@ -25,5 +31,19 @@ export class HealthController {
   })
   getHealth(): HealthResponse {
     return this.healthService.getHealth();
+  }
+
+  @Get('ready')
+  @ApiOperation({ summary: 'Check API database readiness' })
+  @ApiOkResponse({ description: 'The financial database is reachable.' })
+  @ApiServiceUnavailableResponse({
+    description: 'The database is unavailable.',
+  })
+  async getReadiness(
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<HealthResponse> {
+    const result = await this.healthService.getReadiness();
+    response.status(result.status === 'ok' ? 200 : 503);
+    return result;
   }
 }

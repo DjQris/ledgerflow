@@ -53,6 +53,8 @@ describe('background environment', () => {
       BACKGROUND_JOB_MAX_ATTEMPTS: 5,
       BACKGROUND_RETRY_DELAY_MS: 1_000,
       REDIS_CONNECT_TIMEOUT_MS: 2_000,
+      DISPATCHER_HEALTH_PORT: 3101,
+      WORKER_HEALTH_PORT: 3102,
     });
     expect(() =>
       validateBackgroundEnvironment({
@@ -66,5 +68,11 @@ describe('background environment', () => {
         BACKGROUND_RETRY_DELAY_MS: 0,
       }),
     ).toThrow('BACKGROUND_RETRY_DELAY_MS');
+    expect(() =>
+      validateBackgroundEnvironment({
+        DATABASE_URL: databaseUrl,
+        WORKER_HEALTH_PORT: 0,
+      }),
+    ).toThrow('WORKER_HEALTH_PORT');
   });
 });

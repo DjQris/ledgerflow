@@ -1,0 +1,103 @@
+# Phase 3 frontend integration contract
+
+This documents the existing Phase 2 HTTP API for a future Next.js client; no
+frontend is implemented. The base path is `/api/v1`. In development, Swagger
+is available at `/docs`; it is disabled in production. All IDs are UUIDs and
+dates are ISO 8601 strings. Monetary `*Minor` fields are decimal **strings**
+of kobo, never JavaScript numbers or floating-point currency values.
+
+## Browser session and CSRF
+
+Use `credentials: 'include'` on requests. Login and refresh set HTTP-only,
+host-only access and refresh cookies (with `Secure` and `__Host-` prefixes over
+HTTPS). JavaScript does not read the cookies. The API returns an in-memory
+session-bound CSRF token in the `X-CSRF-Token` response header after login or
+refresh, or in `{ "csrfToken": "..." }` from authenticated
+`GET /auth/csrf`. Send it as `X-CSRF-Token` on all authenticated POST/PATCH/
+PUT/DELETE requests, including refresh and logout. Refresh rotates the token;
+replace the client's in-memory value. Do not put it in a URL or persistent
+browser storage. Browser writes must originate from the exact configured
+`AUTH_ALLOWED_ORIGIN`; CORS permits credentials only for configured origins.
+
+| Route | Request | Success | Notes |
+| --- | --- | --- | --- |
+| `POST /auth/register` | `{email,password}` | 201, `{id,email,role,status}` | CUSTOMER only; no session created. |
+| `POST /auth/login` | `{email,password}` | 200, profile plus cookies and CSRF response header | Generic 401 for unknown, wrong-password, or suspended accounts. |
+| `GET /auth/me` | Access cookie | 200, profile | 401 if expired/revoked/suspended. |
+| `GET /auth/csrf` | Access cookie | 200, `{csrfToken}` | For reloads while a session is still valid. |
+| `POST /auth/refresh` | Refresh cookie and CSRF header | 204, new cookies and CSRF response header | Reuse revokes the session; 401 on invalid token. |
+| `POST /auth/logout` | Cookies and CSRF header | 204, cleared cookies | Revokes the database session. |
+
+Passwords must have at least 12 characters and fit within bcrypt's 72-byte
+UTF-8 limit at the API boundary. The browser must
+not store or display raw tokens, password hashes, or internal account fields.
+Retrying a 401 refresh indefinitely is unsafe; return to sign-in if refresh
+fails. Handle 403 as permission/CSRF failure, not as an invitation to refresh.
+
+## Customer financial routes
+
+| Route | Success | Access and limits |
+| --- | --- | --- |
+| `POST /wallets` with `{}` | 201, wallet | CUSTOMER, CSRF; one wallet per customer. |
+| `GET /wallets` | 200, wallet array | CUSTOMER sees own wallets; staff see all. |
+| `GET /wallets/:id` | 200, wallet | CUSTOMER must own it. |
+| `GET /wallets/:id/transactions?page=1&pageSize=20` | 200, `{data,pagination}` | CUSTOMER must own it; page >= 1, pageSize 1–100. |
+| `POST /transfers` | 201, transfer result | CUSTOMER, CSRF, `Idempotency-Key` header. |
+| `GET /transfers` | 200, transfer array | CUSTOMER's outgoing transfers; staff investigation read. Maximum 100, no pagination yet. |
+
+A wallet has `id`, `ownerReference`, `currency` (`NGN`), `status`,
+`balanceMinor`, `createdAt`, and `updatedAt`. Transaction-history `data` rows
+include `id`, `transactionId`, `type`, `status`, `amountMinor`, `description`,
+`externalReference`, `createdAt`, and nullable `postedAt`. `pagination` has
+`page`, `pageSize`, `total`, and `totalPages`.
+
+To submit a transfer, send `{sourceWalletId,destinationWalletId,amountMinor}`
+with a positive canonical integer string amount, for example `"1250"`. The
+source must be the signed-in customer's active wallet. Generate one UUID
+`Idempotency-Key` for the intended transfer and retain it while retrying that
+same request after a network timeout. The same key and payload replay the
+original result; the same key with a different payload returns 409. A 201
+result includes `transferId`, `journalId`, `status`, `completedAt`, both wallet
+IDs, `amountMinor`, `sourceBalanceMinor`, and `destinationBalanceMinor`.
+There is no public funding endpoint.
+
+## Staff routes and permissions
+
+| Route | OPERATIONS | ADMIN |
+| --- | --- | --- |
+| `GET /audit-events?limit=50` | Read | Read |
+| `GET /ops/outbox?limit=50` | Read | Read |
+| `GET /ops/jobs/failed?limit=50` and `GET /ops/jobs/:id` | Read | Read |
+| `POST /ops/jobs/:id/retry` with CSRF | Retry eligible job | Retry eligible job |
+| `GET /admin/users` | Denied | Read |
+| `PATCH /admin/users/:id/role` with `{role}` and CSRF | Denied | Update |
+| `PATCH /admin/users/:id/status` with `{status}` and CSRF | Denied | Update |
+
+Staff cannot submit customer transfers. All `limit` queries default to 50 and
+are capped at 100; user and transfer lists currently cap at 100 without a
+pagination contract. The audit list returns action, actor/resource identifiers,
+outcome, timestamp, and safe metadata. Failed-job results include event/job IDs,
+source, category, fixed reason code, cumulative attempts, failure timestamps,
+status, and retry actor; the outbox list exposes metadata, not event payloads.
+The retry route returns a status such as `queued`, `queued_for_dispatch`, or
+`already_processed`, or 409 if the event is not eligible. The first admin is
+provisioned out of band; there is no public bootstrap route.
+
+## Errors and operational status
+
+Errors use `{statusCode,timestamp,path,method,message,error}`; `message` may
+be a string or validation-message array. `path` is a route template, not a URL
+with query values. Typical statuses are 400 (invalid input), 401 (missing or
+invalid session), 403 (role/ownership/origin/CSRF), 404 (unknown resource),
+409 (idempotency or business conflict), 429 (throttled), 500 (unexpected
+failure), and 503 (unavailable dependency). `X-Request-Id` helps correlate
+safe API logs. Do not display raw backend error details to customers.
+
+`GET /health` is API liveness; `GET /health/ready` is PostgreSQL readiness
+(200/503). Redis failure does not make the financial API unready, but staff
+manual retry may return 503 and background delivery may lag. The worker and
+dispatcher have separate loopback probes described in [operations](operations.md).
+The browser should surface a pending/retry state after uncertain transfer
+network outcomes and retry with the **same** idempotency key, not create a new
+transfer. There is no public push-notification, payment-rail, or real email/SMS
+contract yet.

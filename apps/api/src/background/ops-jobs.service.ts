@@ -116,8 +116,9 @@ export class OpsJobsService {
         }
       }
 
+      const resuming = record.status === 'retry_pending';
       if (
-        record.status !== 'dead_letter' ||
+        (record.status !== 'dead_letter' && !resuming) ||
         !UUID_PATTERN.test(record.eventId)
       ) {
         await this.audit.recordRejectedInTransaction(transaction, {
@@ -164,7 +165,8 @@ export class OpsJobsService {
       }
       if (
         !valid ||
-        (record.source === 'dispatcher' && event.status !== 'dead_letter')
+        (record.source === 'dispatcher' &&
+          event.status !== (resuming ? 'pending' : 'dead_letter'))
       ) {
         await this.audit.recordRejectedInTransaction(transaction, {
           action: 'background_retry_denied',
@@ -175,6 +177,24 @@ export class OpsJobsService {
           metadata: { reason: 'EVENT_NOT_READY' },
         });
         return { status: 'not_eligible' as const, jobId: record.jobId };
+      }
+
+      if (resuming) {
+        await this.audit.recordSucceeded(transaction, {
+          action: 'background_retry_resumed',
+          actorType: 'user',
+          actorId: actor.id,
+          entityType: 'failed_background_job',
+          entityId: id,
+          metadata: { eventId: record.eventId, source: record.source },
+        });
+        return {
+          status:
+            record.source === 'dispatcher'
+              ? 'queued_for_dispatch'
+              : 'enqueue_worker',
+          jobId: record.jobId,
+        };
       }
 
       await transaction.$executeRaw(Prisma.sql`
@@ -274,14 +294,33 @@ export class OpsJobsService {
       }
       return { status: 'queued', jobId: decision.jobId };
     } catch (error) {
-      await this.prisma.$executeRaw(Prisma.sql`
-        UPDATE "failed_background_jobs" SET "status" = 'dead_letter',
-          "updated_at" = CURRENT_TIMESTAMP
-        WHERE "id" = ${id}::uuid AND "status" = 'retry_pending'
-      `);
       if (error instanceof ConflictException) throw error;
+      // A response can fail after another caller has already moved the stable
+      // job ID to the queue. Do not turn a durable retry intent back into a
+      // dead letter or report a false outage in that case.
+      try {
+        const current = await queue.getJob(decision.jobId);
+        const data: unknown = current?.data;
+        const canonical =
+          current?.name === 'transfer.completed' &&
+          typeof data === 'object' &&
+          data !== null &&
+          'eventId' in data &&
+          data.eventId === decision.jobId;
+        if (
+          canonical &&
+          current &&
+          ['waiting', 'delayed', 'active', 'waiting-children'].includes(
+            await current.getState(),
+          )
+        ) {
+          return { status: 'queued', jobId: decision.jobId };
+        }
+      } catch {
+        // Keep retry_pending so a later authorized call can resume the handoff.
+      }
       throw new ServiceUnavailableException(
-        'Queue unavailable; retry remains eligible',
+        'Queue unavailable; retry remains pending',
       );
     } finally {
       await queue.close();

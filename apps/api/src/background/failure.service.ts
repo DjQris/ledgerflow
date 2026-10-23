@@ -156,7 +156,7 @@ export class FailureService {
         "first_failure_at" AS "firstFailureAt",
         "last_failure_at" AS "lastFailureAt", "status",
         "retry_actor_id" AS "retryActorId"
-      FROM "failed_background_jobs" WHERE "status" = 'dead_letter'
+      FROM "failed_background_jobs" WHERE "status" IN ('dead_letter', 'retry_pending')
       ORDER BY "last_failure_at" DESC, "id" DESC LIMIT ${limit}
     `);
   }

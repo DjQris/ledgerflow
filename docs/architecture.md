@@ -1,4 +1,4 @@
-# Phase 1 through 2G architecture
+# Phase 1 through 2H architecture
 
 LedgerFlow is a NestJS modular monolith backed by PostgreSQL. Prisma provides typed database access; PostgreSQL constraints and triggers enforce the financial invariants.
 
@@ -43,3 +43,57 @@ Phase 2D adds session-bound HMAC CSRF tokens for all cookie-authenticated writes
 Phase 2E persists a `transfer.completed` event in the same transaction as each completed transfer. The [outbox design](transactional-outbox.md) specifies minimal versioned payloads, lease-based claims with stale-worker fencing, and retention/privacy policy. Phase 2F runs the dispatcher and BullMQ worker as separate processes. The worker verifies the stored event and commits a processed-event identity plus an internal notification in one PostgreSQL transaction. See [background workers](phase2f-background-workers.md).
 
 Phase 2G adds bounded BullMQ retries, PostgreSQL failure records for worker and dispatcher dead letters, and authenticated, role-restricted operations routes for inspection and manual recovery. See [failure recovery](phase2g-failure-recovery.md). Financial writes remain exclusively in the transfer transaction and are never replayed by a background retry.
+
+Phase 2H verifies the security and financial boundaries, adds separate API and
+background-process readiness checks, and documents operational measurements.
+See [verification](phase2h-verification.md), [operations](operations.md), and
+the [Phase 3 integration contract](frontend-integration-contract.md).
+
+## Authentication sequence
+
+```mermaid
+sequenceDiagram
+    participant Browser
+    participant API
+    participant PostgreSQL
+    Browser->>API: POST /auth/login
+    API->>PostgreSQL: Verify active user
+    API->>PostgreSQL: Store session and refresh hash
+    API-->>Browser: Profile, cookies, CSRF header
+    Browser->>API: GET /auth/me with access cookie
+    API->>PostgreSQL: Check active session and user
+    API-->>Browser: Safe profile
+    Browser->>API: POST /auth/refresh with CSRF
+    API->>PostgreSQL: Lock session and rotate refresh hash
+    API-->>Browser: New cookies and CSRF header
+```
+
+Refresh-token reuse revokes the session; concurrent refreshes serialize on its
+database row. Authenticated writes additionally require the session-bound CSRF
+header. Role and wallet ownership checks run after authentication.
+
+## Committed transfer to internal notification
+
+```mermaid
+sequenceDiagram
+    participant Customer
+    participant API
+    participant PostgreSQL
+    participant Dispatcher
+    participant Redis
+    participant Worker
+    Customer->>API: POST /transfers with idempotency key
+    API->>PostgreSQL: Commit ledger, transfer, audit, outbox
+    PostgreSQL-->>API: Committed result
+    API-->>Customer: Transfer response
+    Dispatcher->>PostgreSQL: Claim due outbox event
+    Dispatcher->>Redis: Add stable event ID job
+    Dispatcher->>PostgreSQL: Mark published with lease token
+    Redis->>Worker: Deliver job
+    Worker->>PostgreSQL: Verify event and commit deduplicated notification
+    Worker-->>Redis: Acknowledge job
+```
+
+Redis unavailability does not roll back the transfer. The outbox remains
+pending for later publication. Worker retries never rerun financial writes;
+`processed_events` and the notification insert share a PostgreSQL transaction.

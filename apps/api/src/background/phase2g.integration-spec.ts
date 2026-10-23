@@ -261,6 +261,35 @@ describe('Phase 2G background failure recovery', () => {
     expect((await queue.getJob(id))?.attemptsMade).toBe(1);
   });
 
+  it('reconciles an exhausted Redis job whose earlier failure row remains retrying', async () => {
+    await startWorker();
+    const id = randomUUID();
+    await queue.add(
+      'transfer.completed',
+      { eventId: 'invalid' },
+      { jobId: id },
+    );
+    await waitFor(async () => {
+      const row = await failures.getByJob('worker', id);
+      return row?.status === 'dead_letter' ? true : undefined;
+    });
+    await stopWorker();
+    await prisma.$executeRaw`
+      UPDATE "failed_background_jobs" SET "status" = 'retrying'
+      WHERE "job_id" = ${id} AND "source" = 'worker'
+    `;
+    await startWorker();
+    const reconciled = await waitFor(async () => {
+      const row = await failures.getByJob('worker', id);
+      return row?.status === 'dead_letter' ? row : undefined;
+    });
+    expect(reconciled).toMatchObject({
+      attempts: 1,
+      failureCategory: 'permanent',
+      failureReason: 'INVALID_JOB',
+    });
+  });
+
   it('tracks cumulative attempts across a manual retry cycle', async () => {
     const id = randomUUID();
     const failure = {
@@ -448,9 +477,10 @@ describe('Phase 2G background failure recovery', () => {
             .set('X-CSRF-Token', operations.csrf),
         ),
       );
-      expect(attempts.map((result) => result.status).sort()).toEqual([
-        201, 409,
-      ]);
+      expect(attempts.some((result) => result.status === 201)).toBe(true);
+      expect(
+        attempts.every((result) => [201, 409].includes(result.status)),
+      ).toBe(true);
       const recovered = attempts.find((result) => result.status === 201)!;
       expect(recovered.body).toMatchObject({
         status: 'queued',
@@ -490,6 +520,54 @@ describe('Phase 2G background failure recovery', () => {
         DROP FUNCTION IF EXISTS "phase2g_reject_notification"();
       `);
     }
+  });
+
+  it('resumes a durable manual retry left pending by an interrupted API handoff', async () => {
+    await stopWorker();
+    const transfer = await createTransfer('retry-handoff');
+    const before = await finances(
+      transfer.sourceId,
+      transfer.destinationId,
+      transfer.transferId,
+    );
+    expect(await dispatcher.dispatchBatch(1)).toMatchObject({ published: 1 });
+    await failures.record({
+      eventId: transfer.eventId,
+      jobId: transfer.eventId,
+      source: 'worker',
+      failure: { category: 'temporary', reason: 'PROCESSING_FAILED' },
+      attempts: 3,
+      exhausted: true,
+    });
+    await prisma.$executeRaw`
+      UPDATE "failed_background_jobs" SET "status" = 'retry_pending',
+        "run_attempts" = 0 WHERE "job_id" = ${transfer.eventId}
+        AND "source" = 'worker'
+    `;
+    const operations = await account(UserRole.OPERATIONS);
+    const failed = await failures.getByJob('worker', transfer.eventId);
+    const result = await request(api.getHttpServer() as Server)
+      .post(`/api/v1/ops/jobs/${failed!.id}/retry`)
+      .set('Cookie', operations.cookie)
+      .set('X-CSRF-Token', operations.csrf)
+      .expect(201);
+    expect(result.body).toMatchObject({ status: 'queued' });
+    expect(
+      await prisma.auditEvent.count({
+        where: { action: 'background_retry_resumed', entityId: failed!.id },
+      }),
+    ).toBe(1);
+    await startWorker();
+    await waitFor(async () =>
+      (await notificationCount(transfer.eventId)) === 1 ? true : undefined,
+    );
+    expect(
+      await finances(
+        transfer.sourceId,
+        transfer.destinationId,
+        transfer.transferId,
+      ),
+    ).toEqual(before);
   });
 
   it('quarantines an unsupported outbox event instead of retrying forever', async () => {

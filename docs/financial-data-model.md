@@ -20,6 +20,9 @@ LedgerFlow uses a double-entry ledger. All monetary values are stored in signed 
 - `Transfer` links source and destination wallets to its journal and optional idempotency record.
 - `IdempotencyRecord` uniquely owns a `(scope, key)` pair and stores the request hash and replayable outcome.
 - `AuditEvent` is an append-only record of important entity activity with an explicit succeeded or rejected outcome. It stores a safe actor identifier, action, resource type and ID, timestamp, and limited metadata.
+- `OutboxEvent` stores a minimal, versioned `transfer.completed` payload committed with the financial transaction. A stable event UUID becomes the BullMQ job ID.
+- `ProcessedEvent` reserves that UUID in the worker transaction; `TransactionNotification` references the event, transfer, and recipient user. The reservation and notification commit together, so duplicate deliveries cannot duplicate the side effect.
+- `FailedBackgroundJob` records sanitized dispatcher/worker failures and cumulative attempts for inspection and audited recovery. It is not a financial posting and never triggers a transfer retry.
 
 ## Source of truth and immutability
 

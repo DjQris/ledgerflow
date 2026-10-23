@@ -17,7 +17,8 @@ reasons are fixed codes, not exception text, SQL values, payloads, or secrets.
 reason code, cumulative attempts, first/last failure times, status, and initiating retry
 actor. It survives BullMQ retention. The worker records each failure; if the
 database is down during an exhausted failure, it reconciles failed Redis jobs
-on startup and every 15 seconds after recovery. Invalid outbox rows are
+on startup and every 15 seconds after recovery, including an older row still
+marked `retrying`. Invalid outbox rows are
 atomically moved to `dead_letter` with a durable failure record. Temporary
 Redis publishing failures remain pending in the outbox with a database retry
 time. A stopped dispatcher must be restarted after Redis becomes available.
@@ -25,19 +26,25 @@ time. A stopped dispatcher must be restarted after Redis becomes available.
 Active OPERATIONS or ADMIN users may use these authenticated routes (all under
 `/api/v1`):
 
-- `GET /ops/jobs/failed` — up to 100 durable dead letters (`?limit=50`).
+- `GET /ops/jobs/failed` — up to 100 dead letters or pending retries (`?limit=50`).
 - `GET /ops/jobs/:id` — one failure record by its UUID.
 - `GET /ops/outbox` — recent delivery metadata, never payloads.
 - `POST /ops/jobs/:id/retry` — audited retry request with the session-bound
   `X-CSRF-Token` header.
 
 Manual retry locks the failure row, rechecks the actor's current role, and
-checks `processed_events` before queueing. Concurrent requests cannot both
-schedule the same job. A processed event returns `already_processed`. A worker
+checks `processed_events` before queueing. Concurrent requests use the same
+stable job ID and cannot schedule duplicate side effects. A processed event
+returns `already_processed`. A worker
 failure uses the stable event UUID job ID, resetting BullMQ's attempt counter;
 an outbox dead letter becomes pending for the dispatcher after its event is
 repaired. Invalid or unrepaired events return a conflict. Notification inserts
 and processed-event markers remain atomic and unique in PostgreSQL.
+
+If the API stops between committing a manual retry and enqueueing the worker
+job, the row stays `retry_pending`. Another authorized call resumes the handoff;
+a queue outage does not silently change it back to a dead letter. Repeated
+calls may both return success for the same waiting job. The resume is audited.
 
 Integration tests use a dedicated database and local Redis to simulate
 invalid jobs, stopped workers, failure after the PostgreSQL commit but before

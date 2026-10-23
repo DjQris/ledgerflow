@@ -4,9 +4,11 @@ export interface BackgroundEnvironment {
   BACKGROUND_JOB_MAX_ATTEMPTS: number;
   BACKGROUND_RETRY_DELAY_MS: number;
   DATABASE_URL: string;
+  DISPATCHER_HEALTH_PORT: number;
   NODE_ENV: 'development' | 'test' | 'production';
   REDIS_CONNECT_TIMEOUT_MS: number;
   REDIS_URL: string;
+  WORKER_HEALTH_PORT: number;
 }
 
 export function validateBackgroundEnvironment(
@@ -52,6 +54,13 @@ export function validateBackgroundEnvironment(
       'BACKGROUND_RETRY_DELAY_MS',
     ),
     DATABASE_URL: databaseUrl,
+    DISPATCHER_HEALTH_PORT: boundedInteger(
+      values.DISPATCHER_HEALTH_PORT,
+      3101,
+      1,
+      65_535,
+      'DISPATCHER_HEALTH_PORT',
+    ),
     NODE_ENV: nodeEnv as BackgroundEnvironment['NODE_ENV'],
     REDIS_CONNECT_TIMEOUT_MS: boundedInteger(
       values.REDIS_CONNECT_TIMEOUT_MS,
@@ -61,6 +70,13 @@ export function validateBackgroundEnvironment(
       'REDIS_CONNECT_TIMEOUT_MS',
     ),
     REDIS_URL: redisUrl,
+    WORKER_HEALTH_PORT: boundedInteger(
+      values.WORKER_HEALTH_PORT,
+      3102,
+      1,
+      65_535,
+      'WORKER_HEALTH_PORT',
+    ),
   };
 }
 

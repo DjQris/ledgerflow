@@ -45,7 +45,7 @@ export class OpsJobsController {
   constructor(private readonly jobs: OpsJobsService) {}
 
   @Get('jobs/failed')
-  @ApiOperation({ summary: 'Inspect durable dead-letter jobs' })
+  @ApiOperation({ summary: 'Inspect dead-letter and pending-retry jobs' })
   listFailed(@Query('limit') limit?: string): Promise<FailedJobRecord[]> {
     return this.jobs.listFailed(resultLimit(limit));
   }

@@ -709,6 +709,24 @@ describe('Phase 2B authentication PostgreSQL HTTP integration', () => {
 
   it('sets security headers, exact credentialed CORS, and safe body limits', async () => {
     const health = await request(server()).get('/api/v1/health').expect(200);
+    const readiness = await request(server())
+      .get('/api/v1/health/ready')
+      .expect(200);
+    expect(readiness.body).toMatchObject({ status: 'ok' });
+    const query = jest
+      .spyOn(prisma, '$queryRaw')
+      .mockRejectedValueOnce(new Error('private database connection detail'));
+    try {
+      const unready = await request(server())
+        .get('/api/v1/health/ready')
+        .expect(503);
+      expect(unready.body).toMatchObject({ status: 'unready' });
+      expect(JSON.stringify(unready.body)).not.toContain(
+        'private database connection detail',
+      );
+    } finally {
+      query.mockRestore();
+    }
     expect(health.headers['x-content-type-options']).toBe('nosniff');
     expect(health.headers['strict-transport-security']).toBeUndefined();
     expect(health.headers['x-request-id']).toMatch(/^[0-9a-f-]{36}$/);
