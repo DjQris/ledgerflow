@@ -33,6 +33,7 @@ import {
 } from '../generated/prisma/enums';
 import { LedgerIntegrityService } from '../integrity/ledger-integrity.service';
 import { LedgerService } from '../ledger/ledger.service';
+import { OutboxService } from '../outbox/outbox.service';
 import { HealthController } from '../health/health.controller';
 import { HealthService } from '../health/health.service';
 import { UsersService } from '../users/users.service';
@@ -182,6 +183,7 @@ describe('Phase 1 audit and ledger integrity PostgreSQL integration', () => {
         { provide: ConfigService, useValue: config },
         PrismaService,
         AuditService,
+        OutboxService,
         UsersService,
         WalletsService,
         TransfersService,

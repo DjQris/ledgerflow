@@ -158,6 +158,8 @@ ledgerflow/
 
 The API includes application configuration, shared HTTP exception handling, health, wallet management, an internal ledger service, a global Prisma module, Phase 2A identity ownership, Phase 2B authentication/session services, and Phase 2C role/resource authorization. The financial schema and its source-of-truth and immutability rules are documented in [docs/financial-data-model.md](docs/financial-data-model.md).
 
+Phase 2E adds a [transactional outbox](docs/transactional-outbox.md): completed transfers persist one minimal, versioned event atomically with their ledger and audit writes. Database-backed claims and expiring fenced leases prepare events for future workers, but this phase does not publish to an external queue or run a dispatcher. The outbox document covers event privacy, retention, and at-least-once delivery semantics.
+
 The transfer engine uses deterministic PostgreSQL row locks and one interactive transaction for every financial write. The Phase 1E API reserves a database unique `(scope, key)` row and completes that row and the transfer in the same transaction. Concurrent duplicate requests wait for the first transaction and replay its saved result; no in-memory lock or cache is used.
 
 Phase 1F records successful operations atomically with their financial writes and records rejected transfers separately. `AuditEvent` rows are append-only. The integrity command provides an independent check of posted journal and wallet projection invariants.

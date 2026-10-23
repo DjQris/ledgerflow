@@ -1,5 +1,6 @@
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { OutboxService } from '../outbox/outbox.service';
 import {
   InvalidTransferError,
   SelfTransferError,
@@ -17,7 +18,11 @@ describe('TransfersService command validation', () => {
       const prisma = {
         $transaction: transactionMock,
       } as unknown as PrismaService;
-      const service = new TransfersService(prisma, new AuditService(prisma));
+      const service = new TransfersService(
+        prisma,
+        new AuditService(prisma),
+        new OutboxService(prisma),
+      );
 
       await expect(
         service.execute({
@@ -35,7 +40,11 @@ describe('TransfersService command validation', () => {
     const prisma = {
       $transaction: transactionMock,
     } as unknown as PrismaService;
-    const service = new TransfersService(prisma, new AuditService(prisma));
+    const service = new TransfersService(
+      prisma,
+      new AuditService(prisma),
+      new OutboxService(prisma),
+    );
 
     await expect(
       service.execute({

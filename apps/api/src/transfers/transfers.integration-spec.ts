@@ -9,6 +9,8 @@ import {
   TransferStatus,
 } from '../generated/prisma/enums';
 import { LedgerService } from '../ledger/ledger.service';
+import { OutboxService } from '../outbox/outbox.service';
+import { parseTransferCompletedPayload } from '../outbox/outbox-events';
 import { PrismaService } from '../prisma/prisma.service';
 import { WalletsService } from '../wallets/wallets.service';
 import { UsersService } from '../users/users.service';
@@ -23,6 +25,8 @@ jest.setTimeout(30_000);
 
 const FAILURE_TRIGGER = 'phase1d_deliberate_transfer_failure';
 const FAILURE_FUNCTION = 'phase1d_raise_transfer_failure';
+const OUTBOX_FAILURE_TRIGGER = 'phase2e_deliberate_outbox_failure';
+const OUTBOX_FAILURE_FUNCTION = 'phase2e_raise_outbox_failure';
 
 describe('TransfersService PostgreSQL integration', () => {
   let prisma: PrismaService;
@@ -56,7 +60,7 @@ describe('TransfersService PostgreSQL integration', () => {
     const audit = new AuditService(prisma);
     wallets = new WalletsService(prisma, audit, new UsersService());
     ledger = new LedgerService(prisma, config, audit);
-    transfers = new TransfersService(prisma, audit);
+    transfers = new TransfersService(prisma, audit, new OutboxService(prisma));
   });
 
   afterAll(async () => {
@@ -99,6 +103,22 @@ describe('TransfersService PostgreSQL integration', () => {
       -300_000n,
       300_000n,
     ]);
+
+    const events = await prisma.$queryRaw<
+      Array<{ id: string; payload: unknown }>
+    >`
+      SELECT "id", "payload" FROM "outbox_events"
+      WHERE "event_type" = 'transfer.completed'
+        AND "aggregate_id" = ${result.transferId}::uuid
+    `;
+    expect(events).toHaveLength(1);
+    expect(parseTransferCompletedPayload(events[0]?.payload)).toEqual({
+      eventType: 'transfer.completed',
+      eventVersion: 1,
+      eventId: events[0]?.id,
+      transferId: result.transferId,
+      occurredAt: result.completedAt,
+    });
 
     await expectBalances(source.id, 700_000n, destination.id, 300_000n);
   });
@@ -160,6 +180,7 @@ describe('TransfersService PostgreSQL integration', () => {
     expect(after).toEqual({
       entriesCount: before.entriesCount + 2,
       journalsCount: before.journalsCount + 1,
+      outboxCount: before.outboxCount + 1,
       transfersCount: before.transfersCount + 1,
     });
 
@@ -199,6 +220,40 @@ describe('TransfersService PostgreSQL integration', () => {
       ).rejects.toBeInstanceOf(TransferPersistenceError);
     } finally {
       await removeFailureTrigger();
+    }
+
+    expect(await financialCounts()).toEqual(before);
+    await expectBalances(source.id, 1_000n, destination.id, 0n);
+  });
+
+  it('rolls back a posted transfer if its outbox insert fails', async () => {
+    const source = await createWallet('outbox-failure-source');
+    const destination = await createWallet('outbox-failure-destination');
+    await fundWallet(source.id, '1000', 'outbox-failure');
+    const before = await financialCounts();
+
+    await prisma.$executeRawUnsafe(`
+      CREATE FUNCTION "${OUTBOX_FAILURE_FUNCTION}"()
+      RETURNS TRIGGER LANGUAGE plpgsql AS $$
+      BEGIN RAISE EXCEPTION 'Deliberate Phase 2E outbox failure'; END; $$;
+      CREATE TRIGGER "${OUTBOX_FAILURE_TRIGGER}"
+      BEFORE INSERT ON "outbox_events"
+      FOR EACH ROW WHEN (NEW."event_type" = 'transfer.completed')
+      EXECUTE FUNCTION "${OUTBOX_FAILURE_FUNCTION}"();
+    `);
+    try {
+      await expect(
+        transfers.execute({
+          amountMinor: '250',
+          destinationWalletId: destination.id,
+          sourceWalletId: source.id,
+        }),
+      ).rejects.toBeInstanceOf(TransferPersistenceError);
+    } finally {
+      await prisma.$executeRawUnsafe(`
+        DROP TRIGGER IF EXISTS "${OUTBOX_FAILURE_TRIGGER}" ON "outbox_events";
+        DROP FUNCTION IF EXISTS "${OUTBOX_FAILURE_FUNCTION}"();
+      `);
     }
 
     expect(await financialCounts()).toEqual(before);
@@ -276,17 +331,27 @@ describe('TransfersService PostgreSQL integration', () => {
   }
 
   async function financialCounts() {
-    const [transfersCount, journalsCount, entriesCount] = await Promise.all([
-      prisma.transfer.count(),
-      prisma.ledgerTransaction.count({
-        where: { type: LedgerTransactionType.TRANSFER },
-      }),
-      prisma.ledgerEntry.count({
-        where: { transaction: { type: LedgerTransactionType.TRANSFER } },
-      }),
-    ]);
+    const [transfersCount, journalsCount, entriesCount, outboxRows] =
+      await Promise.all([
+        prisma.transfer.count(),
+        prisma.ledgerTransaction.count({
+          where: { type: LedgerTransactionType.TRANSFER },
+        }),
+        prisma.ledgerEntry.count({
+          where: { transaction: { type: LedgerTransactionType.TRANSFER } },
+        }),
+        prisma.$queryRaw<Array<{ count: bigint }>>`
+        SELECT COUNT(*)::bigint AS "count" FROM "outbox_events"
+        WHERE "event_type" = 'transfer.completed'
+      `,
+      ]);
 
-    return { entriesCount, journalsCount, transfersCount };
+    return {
+      entriesCount,
+      journalsCount,
+      outboxCount: Number(outboxRows[0]?.count),
+      transfersCount,
+    };
   }
 
   async function installFailureTrigger(): Promise<void> {

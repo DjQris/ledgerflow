@@ -1,4 +1,4 @@
-# Phase 1 through 2D architecture
+# Phase 1 through 2E architecture
 
 LedgerFlow is a NestJS modular monolith backed by PostgreSQL. Prisma provides typed database access; PostgreSQL constraints and triggers enforce the financial invariants.
 
@@ -34,3 +34,5 @@ The ledger is the financial source of truth. A posted journal has at least two s
 The transfer route uses the authenticated user's ID for idempotency scope and verifies source ownership and active status under database locks. Customer reads are wallet-scoped, while operations/admin reads support investigations. Staff cannot submit customer transfers. Admin role/status changes are audited and serialize checks that preserve an active administrator. The simulated actor header is not authentication.
 
 Phase 2D adds session-bound HMAC CSRF tokens for all cookie-authenticated writes, including refresh, logout, transfers, and administration. Login/registration remain Origin/Fetch Metadata protected. A browser can read the token from the login or refresh response header, or from authenticated `GET /api/v1/auth/csrf`; no CSRF token is put in a cookie. Credentialed CORS is restricted to exact configured origins. Helmet headers, bounded bodies, strict DTO validation, safe error envelopes, and request metadata logging harden the HTTP boundary. Throttling has separate IP policies for general, authentication, refresh, transfer, and admin traffic, plus an account-based login/registration policy. The throttle store is process-local, so deployment is limited to a single API instance until shared storage is configured.
+
+Phase 2E persists a `transfer.completed` event in the same transaction as each completed transfer. The [outbox design](transactional-outbox.md) specifies minimal versioned payloads, lease-based claims with stale-worker fencing, and retention/privacy policy. No external publishing worker exists yet.

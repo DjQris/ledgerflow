@@ -64,6 +64,14 @@ enum AuditOutcome {
   @@map("audit_outcome")
 }
 
+enum OutboxStatus {
+  PENDING   @map("pending")
+  CLAIMED   @map("claimed")
+  PUBLISHED @map("published")
+
+  @@map("outbox_status")
+}
+
 enum UserRole {
   CUSTOMER   @map("customer")
   OPERATIONS @map("operations")
@@ -253,4 +261,27 @@ model AuditEvent {
   @@index([entityType, entityId, occurredAt])
   @@index([occurredAt])
   @@map("audit_events")
+}
+
+model OutboxEvent {
+  id             String       @id @default(uuid()) @db.Uuid
+  eventType      String       @map("event_type") @db.VarChar(100)
+  eventVersion   Int          @map("event_version")
+  aggregateId    String       @map("aggregate_id") @db.Uuid
+  aggregateType  String       @map("aggregate_type") @db.VarChar(100)
+  payload        Json
+  status         OutboxStatus @default(PENDING)
+  attempts       Int          @default(0)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  publishedAt    DateTime?    @map("published_at") @db.Timestamptz(6)
+  nextAttemptAt  DateTime     @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+  lastError      String?      @map("last_error") @db.VarChar(100)
+  leaseOwner     String?      @map("lease_owner") @db.VarChar(100)
+  leaseToken     String?      @map("lease_token") @db.Uuid
+  leaseExpiresAt DateTime?    @map("lease_expires_at") @db.Timestamptz(6)
+
+  @@index([status, nextAttemptAt, createdAt])
+  @@index([status, leaseExpiresAt])
+  @@index([aggregateType, aggregateId, createdAt])
+  @@map("outbox_events")
 }

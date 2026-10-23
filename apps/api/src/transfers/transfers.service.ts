@@ -15,6 +15,7 @@ import {
   TransferStatus,
 } from '../generated/prisma/enums';
 import { NGN_CURRENCY } from '../ledger/ledger.constants';
+import { OutboxService } from '../outbox/outbox.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TransferCommand } from './dto/transfer.command';
 import { TransferResult } from './dto/transfer-result.dto';
@@ -52,6 +53,7 @@ export class TransfersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly outbox: OutboxService,
   ) {}
 
   async execute(input: TransferCommand): Promise<TransferResult> {
@@ -213,6 +215,12 @@ export class TransfersService {
         sourceWalletId: command.sourceWalletId,
       },
     });
+
+    await this.outbox.recordTransferCompleted(
+      transaction,
+      transferId,
+      completedAt,
+    );
 
     const balances = await transaction.ledgerAccount.findMany({
       select: { cachedBalanceMinor: true, walletId: true },

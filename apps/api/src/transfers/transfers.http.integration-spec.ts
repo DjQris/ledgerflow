@@ -29,6 +29,7 @@ import {
   LedgerTransactionType,
 } from '../generated/prisma/enums';
 import { LedgerService } from '../ledger/ledger.service';
+import { OutboxService } from '../outbox/outbox.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { WalletsService } from '../wallets/wallets.service';
 import { UsersService } from '../users/users.service';
@@ -143,6 +144,7 @@ describe('Transfer HTTP idempotency PostgreSQL integration', () => {
         { provide: ConfigService, useValue: config },
         PrismaService,
         AuditService,
+        OutboxService,
         TransfersService,
         TransferIdempotencyService,
         TransferRejectionAuditInterceptor,
@@ -198,7 +200,7 @@ describe('Transfer HTTP idempotency PostgreSQL integration', () => {
   }
 
   async function counts() {
-    const [transfers, journals, entries, keys] = await Promise.all([
+    const [transfers, journals, entries, keys, outboxRows] = await Promise.all([
       prisma.transfer.count(),
       prisma.ledgerTransaction.count({
         where: { type: LedgerTransactionType.TRANSFER },
@@ -207,8 +209,18 @@ describe('Transfer HTTP idempotency PostgreSQL integration', () => {
         where: { transaction: { type: LedgerTransactionType.TRANSFER } },
       }),
       prisma.idempotencyRecord.count(),
+      prisma.$queryRaw<Array<{ count: bigint }>>`
+        SELECT COUNT(*)::bigint AS "count" FROM "outbox_events"
+        WHERE "event_type" = 'transfer.completed'
+      `,
     ]);
-    return { transfers, journals, entries, keys };
+    return {
+      transfers,
+      journals,
+      entries,
+      keys,
+      outbox: Number(outboxRows[0]?.count),
+    };
   }
 
   it('returns the original result for ten repeats and writes one balanced journal', async () => {
@@ -231,6 +243,7 @@ describe('Transfer HTTP idempotency PostgreSQL integration', () => {
       journals: before.journals + 1,
       entries: before.entries + 2,
       keys: before.keys + 1,
+      outbox: before.outbox + 1,
     });
     const record = await prisma.idempotencyRecord.findFirstOrThrow({
       include: {
@@ -275,6 +288,7 @@ describe('Transfer HTTP idempotency PostgreSQL integration', () => {
         journals: before.journals + 1,
         entries: before.entries + 2,
         keys: before.keys + 1,
+        outbox: before.outbox + 1,
       });
     },
   );
@@ -330,6 +344,7 @@ describe('Transfer HTTP idempotency PostgreSQL integration', () => {
       journals: before.journals + 2,
       entries: before.entries + 4,
       keys: before.keys + 2,
+      outbox: before.outbox + 2,
     });
   });
 
@@ -362,6 +377,7 @@ describe('Transfer HTTP idempotency PostgreSQL integration', () => {
       expect(after.journals).toBe(before.journals + 1);
       expect(after.entries).toBe(before.entries + 2);
       expect(after.keys).toBe(before.keys + 1);
+      expect(after.outbox).toBe(before.outbox + 1);
       const account = await prisma.ledgerAccount.findUniqueOrThrow({
         where: { walletId: source.wallet.id },
       });
