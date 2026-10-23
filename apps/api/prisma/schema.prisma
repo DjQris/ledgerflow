@@ -72,6 +72,12 @@ enum OutboxStatus {
   @@map("outbox_status")
 }
 
+enum NotificationStatus {
+  RECORDED @map("recorded")
+
+  @@map("notification_status")
+}
+
 enum UserRole {
   CUSTOMER   @map("customer")
   OPERATIONS @map("operations")
@@ -97,6 +103,7 @@ model User {
   updatedAt    DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
   wallets      Wallet[]
   sessions     AuthSession[]
+  notifications TransactionNotification[]
 
   @@index([status, role])
   @@map("users")
@@ -221,6 +228,7 @@ model Transfer {
   destinationWallet   Wallet             @relation("TransferDestinationWallet", fields: [destinationWalletId], references: [id], onDelete: Restrict)
   ledgerTransaction   LedgerTransaction? @relation(fields: [ledgerTransactionId], references: [id], onDelete: Restrict)
   idempotencyRecord   IdempotencyRecord? @relation(fields: [idempotencyRecordId], references: [id], onDelete: Restrict)
+  notifications       TransactionNotification[]
 
   @@index([status, createdAt])
   @@index([sourceWalletId, createdAt])
@@ -284,4 +292,31 @@ model OutboxEvent {
   @@index([status, leaseExpiresAt])
   @@index([aggregateType, aggregateId, createdAt])
   @@map("outbox_events")
+}
+
+model ProcessedEvent {
+  id           String                   @id @db.Uuid
+  eventType    String                   @map("event_type") @db.VarChar(100)
+  processedAt  DateTime                 @default(now()) @map("processed_at") @db.Timestamptz(6)
+  notification TransactionNotification?
+
+  @@index([processedAt])
+  @@map("processed_events")
+}
+
+model TransactionNotification {
+  id              String             @id @default(uuid()) @db.Uuid
+  eventId         String             @unique @map("event_id") @db.Uuid
+  recipientUserId String             @map("recipient_user_id") @db.Uuid
+  transferId      String             @map("transfer_id") @db.Uuid
+  eventType       String             @map("event_type") @db.VarChar(100)
+  status          NotificationStatus @default(RECORDED)
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  event           ProcessedEvent     @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  recipient       User               @relation(fields: [recipientUserId], references: [id], onDelete: Restrict)
+  transfer        Transfer           @relation(fields: [transferId], references: [id], onDelete: Restrict)
+
+  @@index([recipientUserId, createdAt])
+  @@index([transferId])
+  @@map("transaction_notifications")
 }

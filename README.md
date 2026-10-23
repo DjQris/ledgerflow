@@ -19,6 +19,7 @@ cd ledgerflow
 cp .env.example .env
 npm ci
 npm run db:up
+npm run redis:up
 npm run db:migrate:deploy
 npm run db:generate
 npm run db:seed
@@ -26,7 +27,7 @@ npm run db:seed
 
 The defaults in `.env.example` are safe for local development. Keep real secrets in `.env`; local environment files are ignored by Git. Authentication remains unavailable until you set a private `AUTH_SIGNING_KEY` of at least 32 random bytes, for example by generating one locally with `openssl rand -hex 48` and copying it into `.env`. Never commit or share the key.
 
-`db:up` starts PostgreSQL 18 on `127.0.0.1:5432`, backed by a persistent Docker volume. Confirm it is healthy with `docker compose ps`.
+`db:up` starts PostgreSQL 18 on `127.0.0.1:5432`. `redis:up` starts Redis on `127.0.0.1:6379` with persistent append-only storage. Both use named Docker volumes. Confirm they are healthy with `docker compose ps`. PostgreSQL's Compose service is unchanged.
 
 `db:seed` is restricted to local and test environments. It creates the simulated `test-ada` and `test-tobi` NGN wallets and posts balanced development opening-funding journals. It is safe to rerun: stable owner and external references prevent duplicate wallets or opening balances.
 
@@ -49,6 +50,15 @@ For a compiled local run:
 npm run build
 npm run start:prod
 ```
+
+Run the dispatcher and worker independently in two more terminals after `npm run build`:
+
+```bash
+npm run start:dispatcher
+npm run start:worker
+```
+
+The HTTP API does not connect to Redis. `REDIS_URL` configures only the background processes; production requires a private `rediss://` endpoint. See [background workers](docs/phase2f-background-workers.md) for delivery, retry, and shutdown behavior. Redis is bound to loopback in local Compose and must not be exposed publicly.
 
 ## Wallet API
 
@@ -122,7 +132,7 @@ npm run ledger:verify
 
 Run `npm run format` to apply Prettier formatting.
 
-Integration and concurrency tests require `INTEGRATION_DATABASE_URL` to reference a dedicated database named `ledgerflow_phase1f_integration_*` with the committed migrations applied. This historical test-database prefix is retained for all Phase 1 and 2A–2C suites. The auth/authorization suite generates an ephemeral signing key in memory. Historical Phase 1 simulation HTTP tests use test-only controllers; production routes require authenticated identity. For the default local PostgreSQL container:
+Integration and concurrency tests require `INTEGRATION_DATABASE_URL` to reference a dedicated database named `ledgerflow_phase1f_integration_*` with the committed migrations applied. This historical test-database prefix is retained across later suites. The Phase 2F integration suite also requires local Redis (`npm run redis:up`) and creates persistent test jobs. The auth/authorization suite generates an ephemeral signing key in memory. Historical Phase 1 simulation HTTP tests use test-only controllers; production routes require authenticated identity. For the default local PostgreSQL container:
 
 ```bash
 docker exec ledgerflow-database-1 createdb -U ledgerflow ledgerflow_phase1f_integration_local
@@ -151,14 +161,14 @@ ledgerflow/
 │   ├── api/       # NestJS modular-monolith backend
 │   └── web/       # Reserved for the future Next.js application
 ├── docs/           # Architecture and data-model documentation
-├── compose.yaml    # Loopback-only local PostgreSQL
+├── compose.yaml    # Loopback-only local PostgreSQL and Redis
 ├── .env.example
 └── package.json   # Workspace scripts
 ```
 
 The API includes application configuration, shared HTTP exception handling, health, wallet management, an internal ledger service, a global Prisma module, Phase 2A identity ownership, Phase 2B authentication/session services, and Phase 2C role/resource authorization. The financial schema and its source-of-truth and immutability rules are documented in [docs/financial-data-model.md](docs/financial-data-model.md).
 
-Phase 2E adds a [transactional outbox](docs/transactional-outbox.md): completed transfers persist one minimal, versioned event atomically with their ledger and audit writes. Database-backed claims and expiring fenced leases prepare events for future workers, but this phase does not publish to an external queue or run a dispatcher. The outbox document covers event privacy, retention, and at-least-once delivery semantics.
+Phase 2E adds a [transactional outbox](docs/transactional-outbox.md): completed transfers persist one minimal, versioned event atomically with their ledger and audit writes. Phase 2F adds a separate [BullMQ dispatcher and worker](docs/phase2f-background-workers.md) that turn committed events into deduplicated internal notification records. No real SMS/email provider, retry-management API, or frontend dashboard is included.
 
 The transfer engine uses deterministic PostgreSQL row locks and one interactive transaction for every financial write. The Phase 1E API reserves a database unique `(scope, key)` row and completes that row and the transfer in the same transaction. Concurrent duplicate requests wait for the first transaction and replay its saved result; no in-memory lock or cache is used.
 

@@ -1,4 +1,4 @@
-# Phase 1 through 2E architecture
+# Phase 1 through 2F architecture
 
 LedgerFlow is a NestJS modular monolith backed by PostgreSQL. Prisma provides typed database access; PostgreSQL constraints and triggers enforce the financial invariants.
 
@@ -18,6 +18,11 @@ flowchart LR
     Access --> DB
     TransferAPI --> DB
     TransferCore --> DB
+    DB --> Outbox[Outbox claims]
+    Outbox --> Redis[(BullMQ on Redis)]
+    Redis --> Worker[Background worker]
+    Worker --> Notifications[Internal notification records]
+    Notifications --> DB
     AuditRead --> DB
     Seed[Development seed] --> Funding[Opening funding service]
     Funding --> DB
@@ -35,4 +40,4 @@ The transfer route uses the authenticated user's ID for idempotency scope and ve
 
 Phase 2D adds session-bound HMAC CSRF tokens for all cookie-authenticated writes, including refresh, logout, transfers, and administration. Login/registration remain Origin/Fetch Metadata protected. A browser can read the token from the login or refresh response header, or from authenticated `GET /api/v1/auth/csrf`; no CSRF token is put in a cookie. Credentialed CORS is restricted to exact configured origins. Helmet headers, bounded bodies, strict DTO validation, safe error envelopes, and request metadata logging harden the HTTP boundary. Throttling has separate IP policies for general, authentication, refresh, transfer, and admin traffic, plus an account-based login/registration policy. The throttle store is process-local, so deployment is limited to a single API instance until shared storage is configured.
 
-Phase 2E persists a `transfer.completed` event in the same transaction as each completed transfer. The [outbox design](transactional-outbox.md) specifies minimal versioned payloads, lease-based claims with stale-worker fencing, and retention/privacy policy. No external publishing worker exists yet.
+Phase 2E persists a `transfer.completed` event in the same transaction as each completed transfer. The [outbox design](transactional-outbox.md) specifies minimal versioned payloads, lease-based claims with stale-worker fencing, and retention/privacy policy. Phase 2F runs the dispatcher and BullMQ worker as separate processes. The worker verifies the stored event and commits a processed-event identity plus an internal notification in one PostgreSQL transaction. See [background workers](phase2f-background-workers.md).

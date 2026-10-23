@@ -9,8 +9,8 @@ events. Event version 1 contains only `eventType`, `eventVersion`, `eventId`,
 `transferId`, and `occurredAt`; it contains no credentials, balances, wallet
 owner, email, or authentication/session data.
 
-No dispatcher, queue, Redis, or BullMQ is part of this phase. Future workers
-may claim due pending rows and expired leases with one `UPDATE ... FROM` using
+Phase 2F adds a separate dispatcher and BullMQ worker (see [background workers](phase2f-background-workers.md)). The dispatcher
+claims due pending rows and expired leases with one `UPDATE ... FROM` using
 `FOR UPDATE SKIP LOCKED`. Each claim increments `attempts` and replaces the
 UUID lease token. Acknowledgement and retry require the current owner, token,
 and an unexpired lease, so an old worker cannot change a newer claim. Retrying
@@ -20,7 +20,7 @@ consumers must deduplicate using `eventId`. This design guarantees a durable
 event row, not exactly-once external delivery.
 
 Retention is deliberately manual for now. Do **not** delete pending or claimed
-events. Before enabling a dispatcher, set a reviewed retention period for
+events. Before production use, set a reviewed retention period for
 published rows (for example 90 days), ensure consumer replay windows and backup
 retention fit within it, and implement a separately audited, batched purge of
 published rows only. Limit database access to the API and future dispatcher
