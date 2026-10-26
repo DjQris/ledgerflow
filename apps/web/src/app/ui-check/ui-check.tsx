@@ -21,26 +21,40 @@ export function UiCheck() {
             <Card.Header>
               <Card.Title as="h2">UI installation check</Card.Title>
               <Card.Description>
-                Next.js, Tailwind CSS 4, Geist, shadcn-style controls, and PanelUI Web.
+                Next.js, Tailwind CSS 4, Geist, shadcn-style controls, and
+                PanelUI Web.
               </Card.Description>
             </Card.Header>
             <Card.Content className="space-y-5">
               <div className="space-y-1">
-                <p className="text-sm text-muted-foreground">Interactive count</p>
-                <RollingNumber value={count} className="font-mono text-5xl font-semibold" />
+                <p className="text-sm text-muted-foreground">
+                  Interactive count
+                </p>
+                <RollingNumber
+                  value={count}
+                  className="font-mono text-5xl font-semibold"
+                />
               </div>
               <div className="flex flex-wrap gap-3">
-                <Button type="button" onClick={() => setCount((value) => value + 1)}>
+                <Button
+                  type="button"
+                  onClick={() => setCount((value) => value + 1)}
+                >
                   Increment
                 </Button>
-                <Button type="button" variant="outline" onClick={() => setDark((value) => !value)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setDark((value) => !value)}
+                >
                   Use {dark ? 'light' : 'dark'} theme
                 </Button>
               </div>
             </Card.Content>
             <Card.Footer variant="panel">
               <p className="text-xs text-muted-foreground">
-                PanelUI Card and Rolling Number loaded from the official web npm package.
+                PanelUI Card and Rolling Number loaded from the official web npm
+                package.
               </p>
             </Card.Footer>
           </Card>

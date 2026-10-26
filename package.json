@@ -43,7 +43,9 @@
     "web:build": "npm run build --workspace @ledgerflow/web",
     "web:start": "npm run start --workspace @ledgerflow/web",
     "web:lint": "npm run lint --workspace @ledgerflow/web",
-    "web:typecheck": "npm run typecheck --workspace @ledgerflow/web"
+    "web:typecheck": "npm run typecheck --workspace @ledgerflow/web",
+    "web:verify:ui": "npm run verify:ui --workspace @ledgerflow/web",
+    "web:test:money": "npm run test:money --workspace @ledgerflow/web"
   },
   "devDependencies": {
     "shadcn": "^4.22.1"
