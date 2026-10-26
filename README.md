@@ -1,6 +1,6 @@
 # LedgerFlow
 
-LedgerFlow is an npm-workspace monorepo containing a NestJS API and a PostgreSQL/Prisma ledger. `apps/web` is reserved for a future application and is not scaffolded. See the [architecture diagram](docs/architecture.md) and [financial data model](docs/financial-data-model.md).
+LedgerFlow is an npm-workspace monorepo containing a NestJS API, a PostgreSQL/Prisma ledger, and a Phase 3A Next.js frontend foundation. See the [architecture diagram](docs/architecture.md), [financial data model](docs/financial-data-model.md), and [frontend setup notes](docs/phase3a-frontend-setup.md).
 
 The stack is TypeScript, NestJS, PostgreSQL 18, Prisma, Jest, and Supertest. Swagger documents the HTTP API.
 The current major versions are NestJS 12, Prisma 7.10, BullMQ 6, TypeScript 5.9,
@@ -172,7 +172,7 @@ Use `npm run db:migrate:deploy` to apply committed migrations in non-development
 ledgerflow/
 ├── apps/
 │   ├── api/       # NestJS modular-monolith backend
-│   └── web/       # Reserved for the future Next.js application
+│   └── web/       # Next.js frontend foundation and temporary /ui-check
 ├── docs/           # Architecture and data-model documentation
 ├── compose.yaml    # Loopback-only local PostgreSQL and Redis
 ├── .env.example
@@ -188,10 +188,10 @@ delivery and recovery, `audit/` and `integrity/` provide verification, and
 
 The API includes application configuration, shared HTTP exception handling, health, wallet management, an internal ledger service, a global Prisma module, Phase 2A identity ownership, Phase 2B authentication/session services, and Phase 2C role/resource authorization. The financial schema and its source-of-truth and immutability rules are documented in [docs/financial-data-model.md](docs/financial-data-model.md).
 
-Phase 2E adds a [transactional outbox](docs/transactional-outbox.md): completed transfers persist one minimal, versioned event atomically with their ledger and audit writes. Phase 2F adds a separate [BullMQ dispatcher and worker](docs/phase2f-background-workers.md) that turn committed events into deduplicated internal notification records. Phase 2G adds bounded retries, durable [failure recovery](docs/phase2g-failure-recovery.md), and protected operations endpoints. Phase 2H adds [verification and observability](docs/phase2h-verification.md), with a [Phase 3 API contract](docs/frontend-integration-contract.md). No real SMS/email provider or frontend dashboard is included.
+Phase 2E adds a [transactional outbox](docs/transactional-outbox.md): completed transfers persist one minimal, versioned event atomically with their ledger and audit writes. Phase 2F adds a separate [BullMQ dispatcher and worker](docs/phase2f-background-workers.md) that turn committed events into deduplicated internal notification records. Phase 2G adds bounded retries, durable [failure recovery](docs/phase2g-failure-recovery.md), and protected operations endpoints. Phase 2H adds [verification and observability](docs/phase2h-verification.md), with a [Phase 3 API contract](docs/frontend-integration-contract.md). Phase 3A adds only a [frontend setup check](docs/phase3a-frontend-setup.md), not a dashboard or API integration. No real SMS/email provider is included.
 
 The transfer engine uses deterministic PostgreSQL row locks and one interactive transaction for every financial write. The Phase 1E API reserves a database unique `(scope, key)` row and completes that row and the transfer in the same transaction. Concurrent duplicate requests wait for the first transaction and replay its saved result; no in-memory lock or cache is used.
 
 Phase 1F records successful operations atomically with their financial writes and records rejected transfers separately. `AuditEvent` rows are append-only. The integrity command provides an independent check of posted journal and wallet projection invariants.
 
-Current limits: historical provisional wallets remain suspended and unclaimable through the API, funding is seed-only, and inspection endpoints return at most 100 rows. There are no real payment rails, frontend, or deployment features. Before production browser use, provide a verified enrollment path for provisional users, controlled initial-admin provisioning, audit retention, and load testing under expected traffic. Multiple API instances additionally need shared rate-limit storage.
+Current limits: historical provisional wallets remain suspended and unclaimable through the API, funding is seed-only, and inspection endpoints return at most 100 rows. There are no real payment rails, frontend application features, or deployment features. Before production browser use, provide a verified enrollment path for provisional users, controlled initial-admin provisioning, audit retention, and load testing under expected traffic. Multiple API instances additionally need shared rate-limit storage.

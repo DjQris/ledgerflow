@@ -38,6 +38,14 @@
     "test:concurrency": "npm run test:concurrency --workspace @ledgerflow/api",
     "test:cov": "npm run test:cov --workspace @ledgerflow/api",
     "test:watch": "npm run test:watch --workspace @ledgerflow/api",
-    "typecheck": "npm run typecheck --workspace @ledgerflow/api"
+    "typecheck": "npm run typecheck --workspace @ledgerflow/api",
+    "web:dev": "npm run dev --workspace @ledgerflow/web",
+    "web:build": "npm run build --workspace @ledgerflow/web",
+    "web:start": "npm run start --workspace @ledgerflow/web",
+    "web:lint": "npm run lint --workspace @ledgerflow/web",
+    "web:typecheck": "npm run typecheck --workspace @ledgerflow/web"
+  },
+  "devDependencies": {
+    "shadcn": "^4.22.1"
   }
 }
