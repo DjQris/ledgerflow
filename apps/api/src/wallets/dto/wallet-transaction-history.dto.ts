@@ -8,6 +8,7 @@ import {
 
 export interface WalletEntryForResponse {
   amountMinor: bigint;
+  account: { walletId: string | null };
   createdAt: Date;
   description: string | null;
   id: string;
@@ -17,6 +18,7 @@ export interface WalletEntryForResponse {
     postedAt: Date | null;
     status: LedgerTransactionStatus;
     type: LedgerTransactionType;
+    transfer: { sourceWalletId: string; destinationWalletId: string } | null;
   };
 }
 
@@ -30,11 +32,17 @@ export class WalletTransactionResponseDto {
   @ApiProperty({ nullable: true })
   description!: string | null;
 
+  @ApiProperty({ enum: ['INCOMING', 'OUTGOING', 'NEUTRAL'] })
+  direction!: 'INCOMING' | 'OUTGOING' | 'NEUTRAL';
+
   @ApiProperty({ nullable: true })
   externalReference!: string | null;
 
   @ApiProperty({ example: '5ad244aa-f5f1-4560-8a5b-4a4be9684e58' })
   id!: string;
+
+  @ApiProperty({ nullable: true, format: 'uuid' })
+  counterpartyWalletId!: string | null;
 
   @ApiProperty({ example: '2026-10-21T17:00:00.000Z', nullable: true })
   postedAt!: string | null;
@@ -51,12 +59,23 @@ export class WalletTransactionResponseDto {
   static fromRecord(
     record: WalletEntryForResponse,
   ): WalletTransactionResponseDto {
+    const outgoing = record.amountMinor < 0n;
+    const incoming = record.amountMinor > 0n;
+    const transfer = record.transaction.transfer;
+    const walletId = record.account.walletId;
     return {
       amountMinor: serializeMinorUnits(record.amountMinor),
       createdAt: record.createdAt.toISOString(),
       description: record.description,
+      direction: outgoing ? 'OUTGOING' : incoming ? 'INCOMING' : 'NEUTRAL',
       externalReference: record.transaction.externalReference,
       id: record.id,
+      counterpartyWalletId:
+        transfer && walletId === transfer.sourceWalletId
+          ? transfer.destinationWalletId
+          : transfer && walletId === transfer.destinationWalletId
+            ? transfer.sourceWalletId
+            : null,
       postedAt: record.transaction.postedAt?.toISOString() ?? null,
       status: record.transaction.status,
       transactionId: record.transaction.id,

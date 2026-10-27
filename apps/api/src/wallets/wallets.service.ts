@@ -231,7 +231,16 @@ export class WalletsService {
     const [total, entries] = await this.prisma.$transaction([
       this.prisma.ledgerEntry.count({ where }),
       this.prisma.ledgerEntry.findMany({
-        include: { transaction: true },
+        include: {
+          account: { select: { walletId: true } },
+          transaction: {
+            include: {
+              transfer: {
+                select: { sourceWalletId: true, destinationWalletId: true },
+              },
+            },
+          },
+        },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,

@@ -1,5 +1,7 @@
-import { PlaceholderPage } from '@/components/placeholder-page';
+import { CustomerDashboard } from './customer-dashboard';
+import { requireRole } from '@/lib/auth/require-role';
 
-export default function DashboardPage() {
-  return <PlaceholderPage route="/dashboard" />;
+export default async function DashboardPage() {
+  await requireRole('CUSTOMER');
+  return <CustomerDashboard />;
 }

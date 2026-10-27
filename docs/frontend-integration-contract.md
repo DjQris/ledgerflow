@@ -22,7 +22,8 @@ When the access cookie has expired but the refresh cookie is still active,
 `GET /auth/refresh-csrf` returns `{ "csrfToken": "..." }` so a same-origin BFF
 can perform a CSRF-protected refresh. It does not rotate or extend the session.
 
-The Next.js app uses a same-origin, auth-only BFF under `/api/auth/*`. Configure
+The Next.js app uses a same-origin, auth-only BFF under `/api/auth/*` and a
+separate customer-read BFF under `/api/customer/*`. Configure
 its server-only `API_BASE_URL` (default `http://localhost:3000/api/v1`) and
 serve it on port 3001 in development. The BFF validates browser `Origin` on
 every write, forwards only named auth operations and the two expected host-only
@@ -69,8 +70,20 @@ fails. Handle 403 as permission/CSRF failure, not as an invitation to refresh.
 A wallet has `id`, `ownerReference`, `currency` (`NGN`), `status`,
 `balanceMinor`, `createdAt`, and `updatedAt`. Transaction-history `data` rows
 include `id`, `transactionId`, `type`, `status`, `amountMinor`, `description`,
-`externalReference`, `createdAt`, and nullable `postedAt`. `pagination` has
-`page`, `pageSize`, `total`, and `totalPages`.
+`externalReference`, `createdAt`, and nullable `postedAt`. The customer
+dashboard contract also includes `direction` (`INCOMING`, `OUTGOING`, or
+`NEUTRAL`, derived from the signed ledger amount) and nullable
+`counterpartyWalletId` (derived from the transfer's source/destination wallet
+IDs; no counterparty profile data is exposed). `pagination` has `page`,
+`pageSize`, `total`, and `totalPages`.
+
+The browser reads wallet data through fixed same-origin routes
+`GET /api/customer/wallets` and
+`GET /api/customer/wallets/:id/transactions?page=1&pageSize=5`. The BFF checks
+the authenticated role is CUSTOMER before forwarding, validates the wallet ID
+and pagination, and returns only the documented fields. The NestJS API still
+performs wallet ownership checks; the BFF role gate is also necessary because
+staff wallet list permissions are broader.
 
 To submit a transfer, send `{sourceWalletId,destinationWalletId,amountMinor}`
 with a positive canonical integer string amount, for example `"1250"`. The
