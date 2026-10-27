@@ -348,7 +348,7 @@ export function TransferForm() {
             <div className="flex flex-wrap gap-3 border-t border-border pt-4">
               <Button asChild>
                 <Link
-                  href={`/transactions?transferId=${encodeURIComponent(result.transferId)}`}
+                  href={`/transactions/${encodeURIComponent(result.journalId)}?walletId=${encodeURIComponent(result.sourceWalletId)}`}
                 >
                   View transaction details
                 </Link>

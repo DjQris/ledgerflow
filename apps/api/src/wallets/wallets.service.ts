@@ -8,9 +8,11 @@ import { randomUUID } from 'node:crypto';
 
 import { AuditService } from '../audit/audit.service';
 import { AuthenticatedUser } from '../auth/auth.types';
+import { serializeMinorUnits } from '../common/money/minor-units';
 import {
   LedgerAccountType,
   LedgerTransactionStatus,
+  TransferStatus,
   UserRole,
   UserStatus,
 } from '../generated/prisma/enums';
@@ -223,9 +225,67 @@ export class WalletsService {
       throw new Error(`Wallet ${wallet.id} has no ledger account`);
     }
 
+    const filters: Prisma.LedgerEntryWhereInput[] = [];
+    if (query.from || query.to) {
+      filters.push({
+        createdAt: {
+          ...(query.from ? { gte: new Date(query.from) } : {}),
+          ...(query.to
+            ? {
+                lte: new Date(
+                  /^\d{4}-\d{2}-\d{2}$/.test(query.to)
+                    ? `${query.to}T23:59:59.999Z`
+                    : query.to,
+                ),
+              }
+            : {}),
+        },
+      });
+    }
+    if (query.reference) {
+      const referenceMatches: Prisma.LedgerEntryWhereInput[] = [
+        {
+          transaction: {
+            externalReference: {
+              contains: query.reference,
+              mode: 'insensitive',
+            },
+          },
+        },
+      ];
+      if (
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+          query.reference,
+        )
+      ) {
+        referenceMatches.push({ transaction: { id: query.reference } });
+      }
+      filters.push({
+        OR: referenceMatches,
+      });
+    }
+    if (query.status) {
+      const ledgerStatus = Object.values(LedgerTransactionStatus).find(
+        (value) => value === query.status,
+      );
+      const transferStatus = Object.values(TransferStatus).find(
+        (value) => value === query.status,
+      );
+      if (ledgerStatus) filters.push({ transaction: { status: ledgerStatus } });
+      else if (transferStatus)
+        filters.push({
+          transaction: { transfer: { is: { status: transferStatus } } },
+        });
+    }
+    if (query.direction === 'INCOMING')
+      filters.push({ amountMinor: { gt: 0n } });
+    if (query.direction === 'OUTGOING')
+      filters.push({ amountMinor: { lt: 0n } });
+    if (query.direction === 'NEUTRAL') filters.push({ amountMinor: 0n });
+
     const where = {
       accountId: wallet.ledgerAccount.id,
-      transaction: { status: LedgerTransactionStatus.POSTED },
+      ...(filters.length ? { AND: filters } : {}),
     } satisfies Prisma.LedgerEntryWhereInput;
 
     const [total, entries] = await this.prisma.$transaction([
@@ -236,12 +296,16 @@ export class WalletsService {
           transaction: {
             include: {
               transfer: {
-                select: { sourceWalletId: true, destinationWalletId: true },
+                select: {
+                  sourceWalletId: true,
+                  destinationWalletId: true,
+                  status: true,
+                },
               },
             },
           },
         },
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        orderBy: [{ createdAt: query.sort }, { id: query.sort }],
         skip: (query.page - 1) * query.pageSize,
         take: query.pageSize,
         where,
@@ -258,6 +322,51 @@ export class WalletsService {
         total,
         totalPages: total === 0 ? 0 : Math.ceil(total / query.pageSize),
       },
+    };
+  }
+
+  async getTransactionDetailsForUser(id: string, user: AuthenticatedUser) {
+    const transaction = await this.prisma.ledgerTransaction.findFirst({
+      include: {
+        entries: {
+          include: { account: { include: { wallet: true } } },
+          where: { account: { wallet: { userId: user.id } } },
+        },
+        transfer: {
+          select: {
+            amountMinor: true,
+            destinationWalletId: true,
+            sourceWalletId: true,
+            status: true,
+          },
+        },
+      },
+      where: {
+        id,
+        entries: { some: { account: { wallet: { userId: user.id } } } },
+      },
+    });
+    if (!transaction || transaction.entries.length === 0)
+      throw new NotFoundException('Transaction not found');
+    const ownedEntry = transaction.entries[0];
+    return {
+      amountMinor: serializeMinorUnits(
+        transaction.transfer?.amountMinor ??
+          (ownedEntry.amountMinor < 0n
+            ? -ownedEntry.amountMinor
+            : ownedEntry.amountMinor),
+      ),
+      createdAt: ownedEntry.createdAt.toISOString(),
+      currency: transaction.currency,
+      description: transaction.transfer ? null : ownedEntry.description,
+      destinationWalletId: transaction.transfer?.destinationWalletId ?? null,
+      externalReference: transaction.externalReference,
+      id: transaction.id,
+      postedAt: transaction.postedAt?.toISOString() ?? null,
+      sourceWalletId: transaction.transfer?.sourceWalletId ?? null,
+      status: transaction.transfer?.status ?? transaction.status,
+      type: transaction.type,
+      walletId: ownedEntry.account.walletId,
     };
   }
 

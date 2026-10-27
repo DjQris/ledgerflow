@@ -108,7 +108,10 @@ describe('secure customer transfer form', () => {
     expect(screen.getByText(transferId)).toBeInTheDocument();
     expect(
       screen.getByRole('link', { name: 'View transaction details' }),
-    ).toHaveAttribute('href', `/transactions?transferId=${transferId}`);
+    ).toHaveAttribute(
+      'href',
+      `/transactions/${result.journalId}?walletId=${sourceWalletId}`,
+    );
     expect(window.sessionStorage.length).toBe(0);
   });
 

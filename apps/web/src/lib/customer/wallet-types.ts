@@ -32,6 +32,32 @@ export type WalletTransactionHistory = {
   };
 };
 
+export type TransactionHistoryFilters = {
+  page: number;
+  pageSize: number;
+  reference?: string;
+  from?: string;
+  to?: string;
+  status?: string;
+  direction?: string;
+  sort?: 'asc' | 'desc';
+};
+
+export type CustomerTransactionDetails = {
+  amountMinor: string;
+  createdAt: string;
+  currency: string;
+  description: string | null;
+  destinationWalletId: string | null;
+  externalReference: string | null;
+  id: string;
+  postedAt: string | null;
+  sourceWalletId: string | null;
+  status: string;
+  type: string;
+  walletId: string | null;
+};
+
 export type CustomerTransferIntent = {
   ownerUserId: string;
   sourceWalletId: string;
@@ -56,12 +82,8 @@ export type CustomerTransferResult = {
 
 export const customerKeys = {
   wallets: ['customer', 'wallets'] as const,
-  transactions: (walletId: string, pageSize: number) =>
-    [
-      'customer',
-      'wallets',
-      walletId,
-      'transactions',
-      { page: 1, pageSize },
-    ] as const,
+  transactions: (walletId: string, filters: TransactionHistoryFilters) =>
+    ['customer', 'wallets', walletId, 'transactions', filters] as const,
+  transactionDetails: (transactionId: string) =>
+    ['customer', 'transactions', transactionId] as const,
 };

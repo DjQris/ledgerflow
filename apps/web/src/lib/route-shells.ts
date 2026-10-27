@@ -27,7 +27,7 @@ export const routeShells = {
   },
   '/transactions': {
     title: 'Transactions',
-    description: 'A responsive transaction-history shell without live records.',
+    description: 'Search and review activity across your wallets.',
     workspace: 'Customer',
     columns: ['Date', 'Reference', 'Amount', 'Status'],
   },

@@ -1,6 +1,7 @@
 import {
   LedgerTransactionStatus,
   LedgerTransactionType,
+  TransferStatus,
 } from '../../generated/prisma/enums';
 import {
   WalletTransactionResponseDto,
@@ -26,6 +27,7 @@ function record(amountMinor: bigint): WalletEntryForResponse {
       transfer: {
         sourceWalletId: otherWalletId,
         destinationWalletId: walletId,
+        status: TransferStatus.COMPLETED,
       },
     },
   };
@@ -39,7 +41,7 @@ describe('WalletTransactionResponseDto', () => {
       amountMinor: '9007199254740993',
       counterpartyWalletId: otherWalletId,
       direction: 'INCOMING',
-      status: 'POSTED',
+      status: 'COMPLETED',
       type: 'TRANSFER',
     });
   });
@@ -49,6 +51,7 @@ describe('WalletTransactionResponseDto', () => {
     outgoing.transaction.transfer = {
       sourceWalletId: walletId,
       destinationWalletId: otherWalletId,
+      status: TransferStatus.COMPLETED,
     };
     expect(WalletTransactionResponseDto.fromRecord(outgoing)).toMatchObject({
       amountMinor: '-1200',

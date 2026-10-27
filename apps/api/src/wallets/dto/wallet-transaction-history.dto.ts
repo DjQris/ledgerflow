@@ -4,6 +4,7 @@ import { serializeMinorUnits } from '../../common/money/minor-units';
 import {
   LedgerTransactionStatus,
   LedgerTransactionType,
+  TransferStatus,
 } from '../../generated/prisma/enums';
 
 export interface WalletEntryForResponse {
@@ -18,7 +19,11 @@ export interface WalletEntryForResponse {
     postedAt: Date | null;
     status: LedgerTransactionStatus;
     type: LedgerTransactionType;
-    transfer: { sourceWalletId: string; destinationWalletId: string } | null;
+    transfer: {
+      sourceWalletId: string;
+      destinationWalletId: string;
+      status: TransferStatus;
+    } | null;
   };
 }
 
@@ -47,8 +52,13 @@ export class WalletTransactionResponseDto {
   @ApiProperty({ example: '2026-10-21T17:00:00.000Z', nullable: true })
   postedAt!: string | null;
 
-  @ApiProperty({ enum: LedgerTransactionStatus })
-  status!: LedgerTransactionStatus;
+  @ApiProperty({
+    enum: [
+      ...Object.values(LedgerTransactionStatus),
+      ...Object.values(TransferStatus),
+    ],
+  })
+  status!: LedgerTransactionStatus | TransferStatus;
 
   @ApiProperty({ example: '7f6827f9-9a4c-435e-b9cb-1bb62ae2165a' })
   transactionId!: string;
@@ -77,7 +87,7 @@ export class WalletTransactionResponseDto {
             ? transfer.sourceWalletId
             : null,
       postedAt: record.transaction.postedAt?.toISOString() ?? null,
-      status: record.transaction.status,
+      status: transfer?.status ?? record.transaction.status,
       transactionId: record.transaction.id,
       type: record.transaction.type,
     };

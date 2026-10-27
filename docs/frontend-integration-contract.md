@@ -58,14 +58,15 @@ fails. Handle 403 as permission/CSRF failure, not as an invitation to refresh.
 
 ## Customer financial routes
 
-| Route                                              | Success                  | Access and limits                                                                        |
-| -------------------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------- |
-| `POST /wallets` with `{}`                          | 201, wallet              | CUSTOMER, CSRF; one wallet per customer.                                                 |
-| `GET /wallets`                                     | 200, wallet array        | CUSTOMER sees own wallets; staff see all.                                                |
-| `GET /wallets/:id`                                 | 200, wallet              | CUSTOMER must own it.                                                                    |
-| `GET /wallets/:id/transactions?page=1&pageSize=20` | 200, `{data,pagination}` | CUSTOMER must own it; page >= 1, pageSize 1–100.                                         |
-| `POST /transfers`                                  | 201, transfer result     | CUSTOMER, CSRF, `Idempotency-Key` header.                                                |
-| `GET /transfers`                                   | 200, transfer array      | CUSTOMER's outgoing transfers; staff investigation read. Maximum 100, no pagination yet. |
+| Route                                                                                                | Success                                | Access and limits                                                                        |
+| ---------------------------------------------------------------------------------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `POST /wallets` with `{}`                                                                            | 201, wallet                            | CUSTOMER, CSRF; one wallet per customer.                                                 |
+| `GET /wallets`                                                                                       | 200, wallet array                      | CUSTOMER sees own wallets; staff see all.                                                |
+| `GET /wallets/:id`                                                                                   | 200, wallet                            | CUSTOMER must own it.                                                                    |
+| `GET /wallets/:id/transactions?page=1&pageSize=20&reference=&from=&to=&status=&direction=&sort=desc` | 200, `{data,pagination}`               | CUSTOMER must own it; page >= 1, pageSize 1–100. Filters are applied server-side.        |
+| `GET /transactions/:id`                                                                              | 200, customer-safe transaction details | CUSTOMER role only; returns 404 for missing and non-owned transactions.                  |
+| `POST /transfers`                                                                                    | 201, transfer result                   | CUSTOMER, CSRF, `Idempotency-Key` header.                                                |
+| `GET /transfers`                                                                                     | 200, transfer array                    | CUSTOMER's outgoing transfers; staff investigation read. Maximum 100, no pagination yet. |
 
 A wallet has `id`, `ownerReference`, `currency` (`NGN`), `status`,
 `balanceMinor`, `createdAt`, and `updatedAt`. Transaction-history `data` rows
@@ -75,13 +76,17 @@ dashboard contract also includes `direction` (`INCOMING`, `OUTGOING`, or
 `NEUTRAL`, derived from the signed ledger amount) and nullable
 `counterpartyWalletId` (derived from the transfer's source/destination wallet
 IDs; no counterparty profile data is exposed). `pagination` has `page`,
-`pageSize`, `total`, and `totalPages`.
+`pageSize`, `total`, and `totalPages`. Transfer rows report persisted transfer
+status; other rows report ledger status. Failed attempts that rolled back and
+have no persisted transaction do not appear in history. Transaction details
+never expose ledger entries or private audit metadata.
 
 The browser reads wallet data and submits transfers through fixed same-origin routes
 `GET /api/customer/wallets` and
-`GET /api/customer/wallets/:id/transactions?page=1&pageSize=5`. The BFF checks
+`GET /api/customer/wallets/:id/transactions` with pagination and optional
+reference/date/status/direction/sort filters. The BFF checks
 the authenticated role is CUSTOMER before forwarding, validates the wallet ID
-and pagination, and returns only the documented fields. The NestJS API still
+and supported pagination/filter fields, and returns only the documented fields. The NestJS API still
 performs wallet ownership checks; the BFF role gate is also necessary because
 staff wallet list permissions are broader.
 
