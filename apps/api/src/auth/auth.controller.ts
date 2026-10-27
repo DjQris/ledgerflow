@@ -59,7 +59,9 @@ export class AuthController {
   ) {}
 
   @Post('register')
-  @Throttle({ ip: { limit: 30, ttl: 60_000 } })
+  // Requests arrive from the shared Next.js BFF address. Keep this ceiling
+  // aligned with the global API limit; the account bucket remains 10/5 min.
+  @Throttle({ ip: { limit: 600, ttl: 60_000 } })
   @Public()
   @CsrfMode('exempt')
   @UseGuards(AuthOriginGuard)
@@ -73,7 +75,7 @@ export class AuthController {
   }
 
   @Post('login')
-  @Throttle({ ip: { limit: 30, ttl: 60_000 } })
+  @Throttle({ ip: { limit: 600, ttl: 60_000 } })
   @Public()
   @CsrfMode('exempt')
   @UseGuards(AuthOriginGuard)

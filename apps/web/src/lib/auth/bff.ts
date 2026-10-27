@@ -6,6 +6,7 @@ type Operation = 'register' | 'login' | 'me' | 'refresh' | 'logout';
 
 const messages: Record<number, string> = {
   400: 'Please check the details and try again.',
+  413: 'Request is too large.',
   401: 'Your session has ended. Please sign in again.',
   403: 'This request is not permitted.',
   409: 'An account with this email already exists.',
@@ -22,13 +23,50 @@ function json(data: unknown, status: number, headers?: Headers): Response {
 }
 
 function failure(status: number, operation: Operation): Response {
-  const safeStatus = [400, 401, 403, 409, 429, 500, 503].includes(status) ? status : 502;
+  const safeStatus = [400, 401, 403, 409, 413, 429, 500, 503].includes(status) ? status : 502;
   return json({
     status: safeStatus,
     message: operation === 'login' && safeStatus === 401
       ? 'Invalid email or password.'
       : messages[safeStatus] ?? 'The service returned an unexpected response.',
   }, safeStatus);
+}
+
+class PayloadTooLargeError extends Error {}
+
+async function readJsonBody(request: Request, limit: number): Promise<unknown> {
+  const declaredLength = request.headers.get('content-length');
+  if (declaredLength !== null) {
+    if (!/^\d+$/.test(declaredLength)) throw new SyntaxError('Invalid content length');
+    if (Number(declaredLength) > limit) throw new PayloadTooLargeError();
+  }
+
+  const reader = request.body?.getReader();
+  if (!reader) throw new SyntaxError('Missing request body');
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > limit) {
+        await reader.cancel();
+        throw new PayloadTooLargeError();
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) as unknown;
 }
 
 function sameOrigin(request: Request): boolean {
@@ -87,17 +125,16 @@ export async function handleAuth(request: Request, operation: Operation): Promis
     if (!/^application\/json(?:\s*;|$)/i.test(request.headers.get('content-type') ?? '')) {
       return failure(400, operation);
     }
-    if (Number(request.headers.get('content-length') ?? 0) > 16_384) return failure(400, operation);
     try {
-      const input: unknown = await request.json();
+      const input = await readJsonBody(request, 16_384);
       if (!input || typeof input !== 'object' || Array.isArray(input)) return failure(400, operation);
       const value = input as Record<string, unknown>;
       if (Object.keys(value).some((key) => !['email', 'password'].includes(key)) ||
         typeof value.email !== 'string' || typeof value.password !== 'string') return failure(400, operation);
       body = JSON.stringify({ email: value.email, password: value.password });
-      if (body.length > 16_384) return failure(400, operation);
-    } catch {
-      return failure(400, operation);
+      if (new TextEncoder().encode(body).byteLength > 16_384) return failure(413, operation);
+    } catch (error) {
+      return failure(error instanceof PayloadTooLargeError ? 413 : 400, operation);
     }
   }
 

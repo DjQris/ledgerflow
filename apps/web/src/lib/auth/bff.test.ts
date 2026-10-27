@@ -54,6 +54,34 @@ describe('auth-only BFF', () => {
     expect((await handleAuth(write('login', { email: 'a@example.com', password: 'secret' }), 'login')).status).toBe(502);
   });
 
+  it('enforces the body limit while streaming when content-length is absent', async () => {
+    const request = new Request(`${origin}/api/auth/register`, {
+      method: 'POST',
+      headers: { origin, 'content-type': 'application/json' },
+      body: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(JSON.stringify({
+            email: 'a@example.com', password: 'x'.repeat(17_000),
+          })));
+          controller.close();
+        },
+      }),
+      duplex: 'half',
+    } as RequestInit);
+    expect((await handleAuth(request, 'register')).status).toBe(413);
+    expect(mockBackend).not.toHaveBeenCalled();
+  });
+
+  it('uses byte length for JSON bodies with multibyte characters', async () => {
+    const request = new Request(`${origin}/api/auth/register`, {
+      method: 'POST',
+      headers: { origin, 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'a@example.com', password: 'é'.repeat(9_000) }),
+    });
+    expect((await handleAuth(request, 'register')).status).toBe(413);
+    expect(mockBackend).not.toHaveBeenCalled();
+  });
+
   it('obtains a refresh-bound CSRF token before rotating and does not expose it', async () => {
     mockBackend.mockResolvedValueOnce(Response.json({ csrfToken: 'csrf-token' }));
     const headers = new Headers();

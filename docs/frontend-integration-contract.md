@@ -33,6 +33,11 @@ production the web origin must be HTTPS so the backend's `Secure`/`__Host-`
 cookies retain their attributes. Route protection checks `/auth/me` on the
 server; a 401 with a refresh cookie leads to a one-shot renewal page. Browser
 query caches hold only the public profile in memory and are cleared on logout.
+Because the API sees BFF requests from the same server address, its IP bucket
+uses the global 600/minute ceiling for login and registration; the separate
+account bucket remains 10 attempts per email per five minutes. Production
+deployments should also apply per-client-IP limits at the trusted web ingress;
+the BFF must not trust an arbitrary client-supplied forwarding header.
 
 | Route | Request | Success | Notes |
 | --- | --- | --- | --- |
