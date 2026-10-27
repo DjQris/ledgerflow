@@ -22,6 +22,7 @@ import { SecurityModule } from './security/security.module';
 import { CsrfGuard } from './security/csrf.guard';
 import { UsersModule } from './users/users.module';
 import { WalletsModule } from './wallets/wallets.module';
+import { OperationsModule } from './operations/operations.module';
 
 @Module({
   imports: [
@@ -73,6 +74,7 @@ import { WalletsModule } from './wallets/wallets.module';
     LedgerModule,
     WalletsModule,
     TransfersModule,
+    OperationsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

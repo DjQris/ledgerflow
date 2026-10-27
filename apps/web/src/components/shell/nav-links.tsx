@@ -23,7 +23,7 @@ export function NavLinks({
           </h2>
           <ul className="mt-2 space-y-1">
             {group.items.map(({ href, label, icon: Icon }) => {
-              const current = pathname === href;
+              const current = pathname === href || pathname.startsWith(`${href}/`);
               return (
                 <li key={href}>
                   <Link

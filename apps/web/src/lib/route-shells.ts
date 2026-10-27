@@ -39,8 +39,7 @@ export const routeShells = {
   },
   '/operations': {
     title: 'Operations overview',
-    description:
-      'A future command center for staff monitoring and investigation.',
+    description: 'Verified operational metrics, queue state, and recent system activity.',
     workspace: 'Operations',
     metric: 'Jobs requiring review',
   },
@@ -52,7 +51,7 @@ export const routeShells = {
   },
   '/operations/users': {
     title: 'User administration',
-    description: 'A table shell for authorized user management.',
+    description: 'Search, inspect, and manage user access with administrator approval.',
     workspace: 'Operations',
     columns: ['User', 'Role', 'Status', 'Updated'],
   },

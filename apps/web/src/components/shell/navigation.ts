@@ -81,5 +81,6 @@ export function currentNavigationItem(
 ): NavigationItem | undefined {
   return navigationGroupsFor(role)
     .flatMap((group) => group.items)
-    .find((item) => item.href === pathname);
+    .filter((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))
+    .sort((left, right) => right.href.length - left.href.length)[0];
 }

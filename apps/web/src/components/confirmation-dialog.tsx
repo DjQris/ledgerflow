@@ -10,16 +10,18 @@ export function ConfirmationDialog({
   description,
   confirmLabel,
   onConfirm,
+  disabled = false,
 }: {
   triggerLabel: string;
   title: string;
   description: string;
   confirmLabel: string;
   onConfirm: () => void;
+  disabled?: boolean;
 }) {
   return (
     <AlertDialog>
-      <AlertDialog.Trigger render={<Button type="button" variant="outline" />}>
+      <AlertDialog.Trigger render={<Button type="button" variant="outline" disabled={disabled} />}>
         {triggerLabel}
       </AlertDialog.Trigger>
       <AlertDialog.Content size="sm">
@@ -27,7 +29,7 @@ export function ConfirmationDialog({
         <AlertDialog.Description>{description}</AlertDialog.Description>
         <AlertDialog.Footer>
           <AlertDialog.Cancel />
-          <AlertDialog.Action onClick={onConfirm}>
+          <AlertDialog.Action onClick={onConfirm} disabled={disabled}>
             {confirmLabel}
           </AlertDialog.Action>
         </AlertDialog.Footer>

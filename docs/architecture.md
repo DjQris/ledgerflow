@@ -97,3 +97,6 @@ sequenceDiagram
 Redis unavailability does not roll back the transfer. The outbox remains
 pending for later publication. Worker retries never rerun financial writes;
 `processed_events` and the notification insert share a PostgreSQL transaction.
+
+The staff dashboard, its role boundaries, metric definitions, and admin user
+management are documented in [Phase 3G](phase3g-operations-dashboard.md).

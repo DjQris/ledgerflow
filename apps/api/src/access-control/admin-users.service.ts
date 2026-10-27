@@ -11,6 +11,8 @@ import { UserProfileDto } from '../auth/dto/user-profile.dto';
 import { Prisma } from '../generated/prisma/client';
 import { UserRole, UserStatus } from '../generated/prisma/enums';
 import { PrismaService } from '../prisma/prisma.service';
+import { AdminUserQueryDto } from './dto/admin-user-query.dto';
+import { AdminUserPageDto, AdminUserRecordDto } from './dto/admin-user-record.dto';
 
 @Injectable()
 export class AdminUsersService {
@@ -27,11 +29,55 @@ export class AdminUsersService {
     return users.map((user) => UserProfileDto.fromUser(user));
   }
 
+  async search(query: AdminUserQueryDto): Promise<AdminUserPageDto> {
+    const where: Prisma.UserWhereInput = {
+      ...(query.search ? { email: { contains: query.search.trim(), mode: 'insensitive' } } : {}),
+      ...(query.role ? { role: query.role } : {}),
+      ...(query.status ? { status: query.status } : {}),
+    };
+    const [total, users] = await this.prisma.$transaction([
+      this.prisma.user.count({ where }),
+      this.prisma.user.findMany({
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip: (query.page - 1) * query.pageSize,
+        take: query.pageSize,
+        where,
+      }),
+    ]);
+    return {
+      data: users.map((user) => ({
+        createdAt: user.createdAt.toISOString(),
+        email: user.email,
+        id: user.id,
+        role: user.role,
+        status: user.status,
+      })),
+      pagination: {
+        page: query.page,
+        pageSize: query.pageSize,
+        total,
+        totalPages: total === 0 ? 0 : Math.ceil(total / query.pageSize),
+      },
+    };
+  }
+
+  async get(id: string): Promise<AdminUserRecordDto> {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException('User not found');
+    return {
+      createdAt: user.createdAt.toISOString(),
+      email: user.email,
+      id: user.id,
+      role: user.role,
+      status: user.status,
+    };
+  }
+
   async changeRole(
     actor: AuthenticatedUser,
     targetId: string,
     role: UserRole,
-  ): Promise<UserProfileDto> {
+  ): Promise<AdminUserRecordDto> {
     if (actor.id === targetId) {
       throw new ForbiddenException(
         'Administrators cannot change their own role',
@@ -45,7 +91,7 @@ export class AdminUsersService {
         where: { id: targetId },
       });
       if (!target) throw new NotFoundException('User not found');
-      if (target.role === role) return UserProfileDto.fromUser(target);
+      if (target.role === role) return this.toAdminRecord(target);
       if (
         target.role === UserRole.ADMIN &&
         target.status === UserStatus.ACTIVE
@@ -64,7 +110,7 @@ export class AdminUsersService {
         entityType: 'user',
         metadata: { from: target.role, to: role },
       });
-      return UserProfileDto.fromUser(updated);
+      return this.toAdminRecord(updated);
     });
   }
 
@@ -72,7 +118,7 @@ export class AdminUsersService {
     actor: AuthenticatedUser,
     targetId: string,
     status: UserStatus,
-  ): Promise<UserProfileDto> {
+  ): Promise<AdminUserRecordDto> {
     if (actor.id === targetId) {
       throw new ForbiddenException(
         'Administrators cannot change their own status',
@@ -85,7 +131,7 @@ export class AdminUsersService {
         where: { id: targetId },
       });
       if (!target) throw new NotFoundException('User not found');
-      if (target.status === status) return UserProfileDto.fromUser(target);
+      if (target.status === status) return this.toAdminRecord(target);
       if (target.role === UserRole.ADMIN && status === UserStatus.SUSPENDED) {
         await this.assertAnotherActiveAdmin(transaction, targetId);
       }
@@ -121,7 +167,7 @@ export class AdminUsersService {
         entityId: targetId,
         entityType: 'user',
       });
-      return UserProfileDto.fromUser(updated);
+      return this.toAdminRecord(updated);
     });
   }
 
@@ -141,6 +187,22 @@ export class AdminUsersService {
         'The last active administrator cannot be removed',
       );
     }
+  }
+
+  private toAdminRecord(user: {
+    createdAt: Date;
+    email: string;
+    id: string;
+    role: UserRole;
+    status: UserStatus;
+  }): AdminUserRecordDto {
+    return {
+      createdAt: user.createdAt.toISOString(),
+      email: user.email,
+      id: user.id,
+      role: user.role,
+      status: user.status,
+    };
   }
 
   private async assertActorAdmin(
