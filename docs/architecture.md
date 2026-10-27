@@ -1,10 +1,14 @@
-# Phase 1 through 2H architecture
+# LedgerFlow system architecture
 
-LedgerFlow is a NestJS modular monolith backed by PostgreSQL. Prisma provides typed database access; PostgreSQL constraints and triggers enforce the financial invariants.
+LedgerFlow is a Next.js browser application backed by a NestJS modular monolith
+and PostgreSQL. Prisma provides typed database access; PostgreSQL constraints
+and triggers enforce the financial invariants. The web application uses a
+server-side BFF and is not an authority for identity, permissions, or money.
 
 ```mermaid
 flowchart LR
-    Client[Local API client] --> HTTP[NestJS HTTP API]
+    Browser[Browser] --> Web[Next.js app and BFF]
+    Web --> HTTP[NestJS HTTP API]
     HTTP --> Wallets[Wallet service]
     Wallets --> Users[Provisional user provisioning]
     HTTP --> Auth[Customer authentication and sessions]
@@ -103,3 +107,10 @@ management are documented in [Phase 3G](phase3g-operations-dashboard.md).
 
 Protected job recovery, safe audit search, and the read-only ledger verifier
 surface are documented in [Phase 3H](phase3h-operations-center.md).
+
+The customer, operations, and administrator pages, frontend trust boundaries,
+and QA evidence are documented in [frontend architecture](frontend-architecture.md),
+[design system](design-system.md), [API integration](api-integration.md), and
+the [Phase 3 completion record](phase-3-completion.md). Browser authentication
+and role checks are backed by the API on every request; the web BFF only
+narrows and safely presents the API contract.

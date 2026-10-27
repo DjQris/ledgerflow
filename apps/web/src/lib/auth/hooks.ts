@@ -17,15 +17,24 @@ export function useLogin() {
   const cache = useQueryClient();
   return useMutation({
     mutationFn: (input: { email: string; password: string }) =>
-      authRequest<UserProfile>('login', { method: 'POST', body: JSON.stringify(input) }),
-    onSuccess: (user) => cache.setQueryData(authKeys.me, user),
+      authRequest<UserProfile>('login', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+    onSuccess: (user) => {
+      cache.clear();
+      cache.setQueryData(authKeys.me, user);
+    },
   });
 }
 
 export function useRegister() {
   return useMutation({
     mutationFn: (input: { email: string; password: string }) =>
-      authRequest<UserProfile>('register', { method: 'POST', body: JSON.stringify(input) }),
+      authRequest<UserProfile>('register', {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
   });
 }
 
