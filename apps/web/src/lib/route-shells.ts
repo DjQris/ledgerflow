@@ -22,8 +22,7 @@ export const routeShells = {
   },
   '/transfer': {
     title: 'Transfer',
-    description:
-      'The transfer workflow is intentionally not active in this phase.',
+    description: 'Review and submit a secure wallet-to-wallet transfer.',
     workspace: 'Customer',
   },
   '/transactions': {

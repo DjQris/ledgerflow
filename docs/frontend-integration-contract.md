@@ -40,15 +40,15 @@ account bucket remains 10 attempts per email per five minutes. Production
 deployments should also apply per-client-IP limits at the trusted web ingress;
 the BFF must not trust an arbitrary client-supplied forwarding header.
 
-| Route | Request | Success | Notes |
-| --- | --- | --- | --- |
-| `POST /auth/register` | `{email,password}` | 201, `{id,email,role,status}` | CUSTOMER only; no session created. |
-| `POST /auth/login` | `{email,password}` | 200, profile plus cookies and CSRF response header | Generic 401 for unknown, wrong-password, or suspended accounts. |
-| `GET /auth/me` | Access cookie | 200, profile | 401 if expired/revoked/suspended. |
-| `GET /auth/csrf` | Access cookie | 200, `{csrfToken}` | For reloads while a session is still valid. |
-| `GET /auth/refresh-csrf` | Active, unused refresh cookie | 200, `{csrfToken}` | For BFF refresh after access expiry; 401 for missing/used/revoked/suspended session. |
-| `POST /auth/refresh` | Refresh cookie and CSRF header | 204, new cookies and CSRF response header | Reuse revokes the session; 401 on invalid token. |
-| `POST /auth/logout` | Cookies and CSRF header | 204, cleared cookies | Revokes the database session. |
+| Route                    | Request                        | Success                                            | Notes                                                                                |
+| ------------------------ | ------------------------------ | -------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `POST /auth/register`    | `{email,password}`             | 201, `{id,email,role,status}`                      | CUSTOMER only; no session created.                                                   |
+| `POST /auth/login`       | `{email,password}`             | 200, profile plus cookies and CSRF response header | Generic 401 for unknown, wrong-password, or suspended accounts.                      |
+| `GET /auth/me`           | Access cookie                  | 200, profile                                       | 401 if expired/revoked/suspended.                                                    |
+| `GET /auth/csrf`         | Access cookie                  | 200, `{csrfToken}`                                 | For reloads while a session is still valid.                                          |
+| `GET /auth/refresh-csrf` | Active, unused refresh cookie  | 200, `{csrfToken}`                                 | For BFF refresh after access expiry; 401 for missing/used/revoked/suspended session. |
+| `POST /auth/refresh`     | Refresh cookie and CSRF header | 204, new cookies and CSRF response header          | Reuse revokes the session; 401 on invalid token.                                     |
+| `POST /auth/logout`      | Cookies and CSRF header        | 204, cleared cookies                               | Revokes the database session.                                                        |
 
 Passwords must have at least 12 characters and fit within bcrypt's 72-byte
 UTF-8 limit at the API boundary. The browser must
@@ -58,14 +58,14 @@ fails. Handle 403 as permission/CSRF failure, not as an invitation to refresh.
 
 ## Customer financial routes
 
-| Route | Success | Access and limits |
-| --- | --- | --- |
-| `POST /wallets` with `{}` | 201, wallet | CUSTOMER, CSRF; one wallet per customer. |
-| `GET /wallets` | 200, wallet array | CUSTOMER sees own wallets; staff see all. |
-| `GET /wallets/:id` | 200, wallet | CUSTOMER must own it. |
-| `GET /wallets/:id/transactions?page=1&pageSize=20` | 200, `{data,pagination}` | CUSTOMER must own it; page >= 1, pageSize 1–100. |
-| `POST /transfers` | 201, transfer result | CUSTOMER, CSRF, `Idempotency-Key` header. |
-| `GET /transfers` | 200, transfer array | CUSTOMER's outgoing transfers; staff investigation read. Maximum 100, no pagination yet. |
+| Route                                              | Success                  | Access and limits                                                                        |
+| -------------------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------- |
+| `POST /wallets` with `{}`                          | 201, wallet              | CUSTOMER, CSRF; one wallet per customer.                                                 |
+| `GET /wallets`                                     | 200, wallet array        | CUSTOMER sees own wallets; staff see all.                                                |
+| `GET /wallets/:id`                                 | 200, wallet              | CUSTOMER must own it.                                                                    |
+| `GET /wallets/:id/transactions?page=1&pageSize=20` | 200, `{data,pagination}` | CUSTOMER must own it; page >= 1, pageSize 1–100.                                         |
+| `POST /transfers`                                  | 201, transfer result     | CUSTOMER, CSRF, `Idempotency-Key` header.                                                |
+| `GET /transfers`                                   | 200, transfer array      | CUSTOMER's outgoing transfers; staff investigation read. Maximum 100, no pagination yet. |
 
 A wallet has `id`, `ownerReference`, `currency` (`NGN`), `status`,
 `balanceMinor`, `createdAt`, and `updatedAt`. Transaction-history `data` rows
@@ -77,13 +77,30 @@ dashboard contract also includes `direction` (`INCOMING`, `OUTGOING`, or
 IDs; no counterparty profile data is exposed). `pagination` has `page`,
 `pageSize`, `total`, and `totalPages`.
 
-The browser reads wallet data through fixed same-origin routes
+The browser reads wallet data and submits transfers through fixed same-origin routes
 `GET /api/customer/wallets` and
 `GET /api/customer/wallets/:id/transactions?page=1&pageSize=5`. The BFF checks
 the authenticated role is CUSTOMER before forwarding, validates the wallet ID
 and pagination, and returns only the documented fields. The NestJS API still
 performs wallet ownership checks; the BFF role gate is also necessary because
 staff wallet list permissions are broader.
+
+The customer transfer form submits through `POST /api/customer/transfers` with
+only `{sourceWalletId,destinationWalletId,amountMinor}` and a UUID
+`Idempotency-Key`. This BFF checks the request Origin and customer role, obtains
+the session-bound CSRF token server-side, forwards the token only to NestJS,
+and returns a strict allowlist of the transfer result. CSRF tokens and raw
+backend error envelopes are never returned to the browser. No description
+field is supported by the transfer API.
+
+If a submission times out or returns an ambiguous server/conflict response,
+the result is unknown rather than failed. Preserve the exact request and key
+in tab-scoped session storage (no credentials or CSRF token), then verify by
+repeating that exact POST with the same key. The backend replays a completed
+result for that key and payload. Never retry the same intent with a new key or
+automatically create a second transfer. Only a confirmed 201 response
+invalidates wallet and transaction queries; balances are not optimistically
+updated.
 
 To submit a transfer, send `{sourceWalletId,destinationWalletId,amountMinor}`
 with a positive canonical integer string amount, for example `"1250"`. The
@@ -97,15 +114,15 @@ There is no public funding endpoint.
 
 ## Staff routes and permissions
 
-| Route | OPERATIONS | ADMIN |
-| --- | --- | --- |
-| `GET /audit-events?limit=50` | Read | Read |
-| `GET /ops/outbox?limit=50` | Read | Read |
-| `GET /ops/jobs/failed?limit=50` and `GET /ops/jobs/:id` | Read | Read |
-| `POST /ops/jobs/:id/retry` with CSRF | Retry eligible job | Retry eligible job |
-| `GET /admin/users` | Denied | Read |
-| `PATCH /admin/users/:id/role` with `{role}` and CSRF | Denied | Update |
-| `PATCH /admin/users/:id/status` with `{status}` and CSRF | Denied | Update |
+| Route                                                    | OPERATIONS         | ADMIN              |
+| -------------------------------------------------------- | ------------------ | ------------------ |
+| `GET /audit-events?limit=50`                             | Read               | Read               |
+| `GET /ops/outbox?limit=50`                               | Read               | Read               |
+| `GET /ops/jobs/failed?limit=50` and `GET /ops/jobs/:id`  | Read               | Read               |
+| `POST /ops/jobs/:id/retry` with CSRF                     | Retry eligible job | Retry eligible job |
+| `GET /admin/users`                                       | Denied             | Read               |
+| `PATCH /admin/users/:id/role` with `{role}` and CSRF     | Denied             | Update             |
+| `PATCH /admin/users/:id/status` with `{status}` and CSRF | Denied             | Update             |
 
 Staff cannot submit customer transfers. All `limit` queries default to 50 and
 are capped at 100; user and transfer lists currently cap at 100 without a
