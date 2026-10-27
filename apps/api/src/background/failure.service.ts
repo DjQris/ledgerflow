@@ -11,11 +11,17 @@ export interface FailedJobRecord {
   eventId: string;
   jobId: string;
   source: 'dispatcher' | 'worker';
+  eventType?: string | null;
+  transferId?: string | null;
+  processingStatus?: string | null;
+  transferStatus?: string | null;
+  eventCreatedAt?: Date | null;
   failureCategory: 'temporary' | 'permanent';
   failureReason: string;
   attempts: number;
   firstFailureAt: Date;
   lastFailureAt: Date;
+  updatedAt?: Date;
   status: 'retrying' | 'dead_letter' | 'retry_pending' | 'resolved';
   retryActorId: string | null;
 }
@@ -136,29 +142,58 @@ export class FailureService {
   }
 
   async getById(id: string): Promise<FailedJobRecord | null> {
-    const rows = await this.prisma.$queryRaw<FailedJobRecord[]>(Prisma.sql`
-      SELECT "id", "event_id" AS "eventId", "job_id" AS "jobId",
-        "source", "failure_category" AS "failureCategory",
-        "failure_reason" AS "failureReason", "attempts",
-        "first_failure_at" AS "firstFailureAt",
-        "last_failure_at" AS "lastFailureAt", "status",
-        "retry_actor_id" AS "retryActorId"
-      FROM "failed_background_jobs" WHERE "id" = ${id}::uuid
-    `);
+    const rows = await this.prisma.$queryRaw<FailedJobRecord[]>(
+      this.jobSelect(Prisma.sql`WHERE job."id" = ${id}::uuid`),
+    );
     return rows[0] ?? null;
   }
 
-  async listFailed(limit = 50): Promise<FailedJobRecord[]> {
-    return this.prisma.$queryRaw<FailedJobRecord[]>(Prisma.sql`
-      SELECT "id", "event_id" AS "eventId", "job_id" AS "jobId",
-        "source", "failure_category" AS "failureCategory",
-        "failure_reason" AS "failureReason", "attempts",
-        "first_failure_at" AS "firstFailureAt",
-        "last_failure_at" AS "lastFailureAt", "status",
-        "retry_actor_id" AS "retryActorId"
-      FROM "failed_background_jobs" WHERE "status" IN ('dead_letter', 'retry_pending')
-      ORDER BY "last_failure_at" DESC, "id" DESC LIMIT ${limit}
-    `);
+  async listFailed(
+    filter: {
+      limit?: number;
+      status?: FailedJobRecord['status'];
+      source?: FailedJobRecord['source'];
+      eventType?: string;
+    } = {},
+  ): Promise<FailedJobRecord[]> {
+    const clauses: Prisma.Sql[] = [];
+    if (filter.status)
+      clauses.push(Prisma.sql`job."status" = ${filter.status}`);
+    if (filter.source)
+      clauses.push(Prisma.sql`job."source" = ${filter.source}`);
+    if (filter.eventType)
+      clauses.push(Prisma.sql`outbox."event_type" = ${filter.eventType}`);
+    const where = clauses.length
+      ? Prisma.sql`WHERE ${Prisma.join(clauses, ' AND ')}`
+      : Prisma.empty;
+    return this.prisma.$queryRaw<FailedJobRecord[]>(
+      this.jobSelect(where, filter.limit ?? 50),
+    );
+  }
+
+  private jobSelect(where: Prisma.Sql, limit = 1): Prisma.Sql {
+    return Prisma.sql`
+      SELECT job."id", job."event_id" AS "eventId", job."job_id" AS "jobId",
+        job."source", outbox."event_type" AS "eventType",
+        transfer."id"::text AS "transferId", outbox."status"::text AS "processingStatus",
+        transfer."status"::text AS "transferStatus", outbox."created_at" AS "eventCreatedAt",
+        job."failure_category" AS "failureCategory",
+        job."failure_reason" AS "failureReason", job."attempts",
+        job."first_failure_at" AS "firstFailureAt", job."last_failure_at" AS "lastFailureAt",
+        job."updated_at" AS "updatedAt", job."status", job."retry_actor_id" AS "retryActorId"
+      FROM "failed_background_jobs" AS job
+      LEFT JOIN "outbox_events" AS outbox ON outbox."id"::text = job."event_id"
+      LEFT JOIN "transfers" AS transfer ON outbox."aggregate_type" = 'transfer'
+        AND outbox."event_type" = 'transfer.completed'
+        AND outbox."event_version" = 1
+        AND outbox."payload"->>'eventType' = 'transfer.completed'
+        AND outbox."payload"->>'eventVersion' = '1'
+        AND outbox."payload"->>'eventId' = outbox."id"::text
+        AND outbox."payload"->>'transferId' = outbox."aggregate_id"::text
+        AND transfer."id" = outbox."aggregate_id"
+      ${where}
+      ORDER BY job."last_failure_at" DESC, job."id" DESC LIMIT ${limit}
+    `;
   }
 
   async listOutbox(limit = 50): Promise<

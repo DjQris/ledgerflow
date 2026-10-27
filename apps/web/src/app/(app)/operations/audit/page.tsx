@@ -1,5 +1,11 @@
-import { PlaceholderPage } from '@/components/placeholder-page';
+import { Suspense } from 'react';
 
-export default function OperationsAuditPage() {
-  return <PlaceholderPage route="/operations/audit" />;
+import { LoadingState } from '@/components/states';
+import { PageHeader } from '@/components/page-header';
+import { requireRole } from '@/lib/auth/require-role';
+import { OperationsAudit } from './operations-audit';
+
+export default async function OperationsAuditPage() {
+  await requireRole('OPERATIONS', 'ADMIN');
+  return <div className="space-y-6"><PageHeader title="Audit events" description="Search and review read-only audit records for transactions, authentication, administration, and recovery. Context is allowlisted by event type." /><Suspense fallback={<LoadingState label="Loading audit events" />}><OperationsAudit /></Suspense></div>;
 }

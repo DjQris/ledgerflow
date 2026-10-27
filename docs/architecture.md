@@ -100,3 +100,6 @@ pending for later publication. Worker retries never rerun financial writes;
 
 The staff dashboard, its role boundaries, metric definitions, and admin user
 management are documented in [Phase 3G](phase3g-operations-dashboard.md).
+
+Protected job recovery, safe audit search, and the read-only ledger verifier
+surface are documented in [Phase 3H](phase3h-operations-center.md).

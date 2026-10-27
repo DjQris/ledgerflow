@@ -61,3 +61,7 @@ If the worker is unavailable, jobs remain in BullMQ; restart it and verify
 letters, repair the underlying cause, and use audited `POST /ops/jobs/:id/retry`
 only for eligible events. Never replay a financial transfer as a recovery step.
 Run `npm run ledger:verify` after suspected financial inconsistency.
+The authenticated `/api/v1/ops/reconciliation` route runs that same
+read-only verifier for operations staff; it does not compare external
+settlement data or write corrections. See [Phase 3H](phase3h-operations-center.md)
+for the operations UI contract and report limitations.

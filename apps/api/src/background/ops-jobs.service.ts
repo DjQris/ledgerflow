@@ -17,6 +17,7 @@ import { parseTransferCompletedPayload } from '../outbox/outbox-events';
 import { PrismaService } from '../prisma/prisma.service';
 import { redisConnection } from './background-environment';
 import { FailedJobRecord, FailureService } from './failure.service';
+import { OpsJobQueryDto } from './ops-job-query.dto';
 import { TRANSFER_EVENTS_QUEUE } from './queue.module';
 
 const UUID_PATTERN =
@@ -41,8 +42,8 @@ export class OpsJobsService {
     private readonly config: ConfigService<EnvironmentVariables, true>,
   ) {}
 
-  listFailed(limit: number): Promise<FailedJobRecord[]> {
-    return this.failures.listFailed(limit);
+  listFailed(query: OpsJobQueryDto): Promise<FailedJobRecord[]> {
+    return this.failures.listFailed(query);
   }
 
   async get(id: string): Promise<FailedJobRecord> {

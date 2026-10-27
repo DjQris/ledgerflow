@@ -12,7 +12,11 @@ import { Roles } from '../access-control/decorators/roles.decorator';
 import { PermissionPolicies } from '../access-control/permission-policies';
 import { AuditService } from './audit.service';
 import { AuditEventResponseDto } from './dto/audit-event-response.dto';
-import { AuditQueryDto } from './dto/audit-query.dto';
+import {
+  AuditEventPageDto,
+  AuditQueryDto,
+  AuditSearchQueryDto,
+} from './dto/audit-query.dto';
 
 @ApiTags('audit')
 @ApiCookieAuth('access-cookie')
@@ -29,5 +33,13 @@ export class AuditController {
   @ApiForbiddenResponse({ description: 'Operations or admin access required.' })
   list(@Query() query: AuditQueryDto): Promise<AuditEventResponseDto[]> {
     return this.audit.list(query.limit);
+  }
+
+  @Get('search')
+  @Roles(...PermissionPolicies.auditRead)
+  @ApiOperation({ summary: 'Search and paginate safe audit context' })
+  @ApiOkResponse({ type: AuditEventPageDto })
+  search(@Query() query: AuditSearchQueryDto): Promise<AuditEventPageDto> {
+    return this.audit.search(query);
   }
 }

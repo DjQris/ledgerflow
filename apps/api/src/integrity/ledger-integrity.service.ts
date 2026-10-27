@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -33,7 +34,9 @@ export interface LedgerIntegrityIssue {
 }
 
 export interface LedgerIntegrityReport {
+  reportId: string;
   checkedAt: string;
+  accountCount: string;
   journalCount: string;
   walletCount: string;
   ok: boolean;
@@ -47,7 +50,7 @@ export class LedgerIntegrityService {
   async verify(): Promise<LedgerIntegrityReport> {
     return this.prisma.$transaction(
       async (transaction) => {
-        const [journalCount, walletCount, journals, wallets] =
+        const [journalCount, walletCount, accountCount, journals, wallets] =
           await Promise.all([
             transaction.$queryRaw<
               CountRow[]
@@ -55,6 +58,9 @@ export class LedgerIntegrityService {
             transaction.$queryRaw<
               CountRow[]
             >`SELECT count(*)::bigint AS "count" FROM "wallets"`,
+            transaction.$queryRaw<
+              CountRow[]
+            >`SELECT count(*)::bigint AS "count" FROM "ledger_accounts"`,
             transaction.$queryRaw<JournalIssueRow[]>`
             SELECT journal."id" AS "id",
                    count(entry."id")::bigint AS "entryCount",
@@ -133,7 +139,9 @@ export class LedgerIntegrityService {
         }
 
         return {
+          reportId: randomUUID(),
           checkedAt: new Date().toISOString(),
+          accountCount: (accountCount[0]?.count ?? 0n).toString(),
           journalCount: (journalCount[0]?.count ?? 0n).toString(),
           walletCount: (walletCount[0]?.count ?? 0n).toString(),
           ok: issues.length === 0,

@@ -57,19 +57,19 @@ export const routeShells = {
   },
   '/operations/jobs': {
     title: 'Background jobs',
-    description: 'A table shell for failed-job review and safe recovery.',
+    description: 'Inspect durable failure records and request audited, eligible notification retries.',
     workspace: 'Operations',
     columns: ['Job', 'Source', 'Reason', 'Status', 'Updated'],
   },
   '/operations/audit': {
     title: 'Audit trail',
-    description: 'A table shell for authorized audit-event review.',
+    description: 'Search read-only authentication, transfer, administration, and recovery events.',
     workspace: 'Operations',
     columns: ['Time', 'Actor', 'Action', 'Outcome'],
   },
   '/operations/reconciliation': {
     title: 'Reconciliation',
-    description: 'A future surface for ledger and background-delivery checks.',
+    description: 'Run the backend ledger-integrity verifier and inspect genuine discrepancy records.',
     workspace: 'Operations',
     columns: ['Check', 'Scope', 'Result', 'Updated'],
   },
