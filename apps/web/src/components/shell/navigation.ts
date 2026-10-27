@@ -12,6 +12,7 @@ import {
   Wallet,
   type LucideIcon,
 } from 'lucide-react';
+import type { UserRole } from '@/lib/auth/types';
 
 export type NavigationItem = {
   href: string;
@@ -61,10 +62,24 @@ export const navigationGroups: { label: string; items: NavigationItem[] }[] = [
     : []),
 ];
 
+export function navigationGroupsFor(role: UserRole) {
+  return navigationGroups.filter((group) => {
+    if (group.label === 'Development') return true;
+    if (group.label === 'Customer workspace') return role === 'CUSTOMER';
+    return role === 'ADMIN' || role === 'OPERATIONS';
+  }).map((group) => ({
+    ...group,
+    items: role === 'OPERATIONS'
+      ? group.items.filter((item) => item.href !== '/operations/users')
+      : group.items,
+  }));
+}
+
 export function currentNavigationItem(
   pathname: string,
+  role: UserRole,
 ): NavigationItem | undefined {
-  return navigationGroups
+  return navigationGroupsFor(role)
     .flatMap((group) => group.items)
     .find((item) => item.href === pathname);
 }

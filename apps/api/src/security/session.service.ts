@@ -106,6 +106,29 @@ export class SessionService {
     return record?.sessionId;
   }
 
+  async findActiveRefreshSessionId(
+    rawRefreshToken: string | undefined,
+  ): Promise<string | undefined> {
+    if (!this.tokens.isRefreshToken(rawRefreshToken)) return undefined;
+    const now = new Date();
+    const record = await this.prisma.refreshToken.findUnique({
+      where: { tokenHash: this.tokens.hashRefreshToken(rawRefreshToken) },
+      include: { session: { include: { user: true } } },
+    });
+    if (
+      !record ||
+      record.usedAt ||
+      record.revokedAt ||
+      record.expiresAt <= now ||
+      record.session.revokedAt ||
+      record.session.expiresAt <= now ||
+      record.session.user.status !== UserStatus.ACTIVE
+    ) {
+      return undefined;
+    }
+    return record.sessionId;
+  }
+
   async rotate(rawRefreshToken: string | undefined): Promise<IssuedTokens> {
     this.tokens.assertConfigured();
     if (!this.tokens.isRefreshToken(rawRefreshToken)) {

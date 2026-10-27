@@ -5,8 +5,9 @@ import Link from 'next/link';
 import { Landmark, Menu, X } from 'lucide-react';
 
 import { NavLinks } from './nav-links';
+import type { UserRole } from '@/lib/auth/types';
 
-export function MobileNavigation({ pathname }: { pathname: string }) {
+export function MobileNavigation({ pathname, role }: { pathname: string; role: UserRole }) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
@@ -52,7 +53,7 @@ export function MobileNavigation({ pathname }: { pathname: string }) {
           >
             <Landmark className="size-5" aria-hidden="true" /> LedgerFlow
           </Link>
-          <NavLinks pathname={pathname} onNavigate={() => setOpen(false)} />
+          <NavLinks pathname={pathname} role={role} onNavigate={() => setOpen(false)} />
         </nav>
       )}
     </div>

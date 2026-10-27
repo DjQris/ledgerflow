@@ -2,18 +2,21 @@ import Link from 'next/link';
 
 import { cn } from '@/lib/utils';
 
-import { navigationGroups } from './navigation';
+import { navigationGroupsFor } from './navigation';
+import type { UserRole } from '@/lib/auth/types';
 
 export function NavLinks({
   pathname,
+  role,
   onNavigate,
 }: {
   pathname: string;
+  role: UserRole;
   onNavigate?: () => void;
 }) {
   return (
     <div className="space-y-6">
-      {navigationGroups.map((group) => (
+      {navigationGroupsFor(role).map((group) => (
         <div key={group.label}>
           <h2 className="px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             {group.label}

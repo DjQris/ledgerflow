@@ -2,11 +2,13 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Post,
   Req,
   Res,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -32,6 +34,7 @@ import { PermissionPolicies } from '../access-control/permission-policies';
 import { CookieService } from '../security/cookie.service';
 import { CsrfMode } from '../security/csrf-mode.decorator';
 import { CsrfService } from '../security/csrf.service';
+import { SessionService } from '../security/session.service';
 import { AuthService } from './auth.service';
 import type { AuthenticatedUser } from './auth.types';
 import type { AuthenticatedRequest } from './guards/authentication.guard';
@@ -52,6 +55,7 @@ export class AuthController {
     private readonly auth: AuthService,
     private readonly cookies: CookieService,
     private readonly csrf: CsrfService,
+    private readonly sessions: SessionService,
   ) {}
 
   @Post('register')
@@ -154,10 +158,27 @@ export class AuthController {
   }
 
   @Get('csrf')
+  @Header('Cache-Control', 'no-store')
   @Roles(...PermissionPolicies.identityRead)
   @ApiCookieAuth('access-cookie')
   @ApiOperation({ summary: 'Get a session-bound CSRF token' })
   csrfToken(@Req() request: AuthenticatedRequest): { csrfToken: string } {
     return { csrfToken: this.csrf.issue(request.authenticatedSessionId!) };
+  }
+
+  @Get('refresh-csrf')
+  @Header('Cache-Control', 'no-store')
+  @Throttle({ ip: { limit: 60, ttl: 60_000 } })
+  @Public()
+  @ApiCookieAuth('refresh-cookie')
+  @ApiOperation({ summary: 'Get a CSRF token for an active refresh session' })
+  @ApiOkResponse({ description: 'Session-bound CSRF token.' })
+  @ApiUnauthorizedResponse({ description: 'No active refresh session.' })
+  async refreshCsrf(@Req() request: Request): Promise<{ csrfToken: string }> {
+    const sessionId = await this.sessions.findActiveRefreshSessionId(
+      this.cookies.readRefresh(request),
+    );
+    if (!sessionId) throw new UnauthorizedException('Authentication required');
+    return { csrfToken: this.csrf.issue(sessionId) };
   }
 }

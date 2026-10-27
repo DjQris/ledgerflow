@@ -51,6 +51,17 @@ async function bootstrap(): Promise<void> {
       },
       'access-cookie',
     )
+    .addCookieAuth(
+      'ledgerflow_refresh',
+      {
+        description:
+          'HTTP-only refresh cookie (production uses __Host- prefix)',
+        in: 'cookie',
+        name: 'ledgerflow_refresh',
+        type: 'apiKey',
+      },
+      'refresh-cookie',
+    )
     .addApiKey(
       {
         type: 'apiKey',

@@ -1,7 +1,7 @@
 # Phase 3 frontend integration contract
 
-This documents the existing Phase 2 HTTP API for a future Next.js client; no
-frontend is implemented. The base path is `/api/v1`. In development, Swagger
+This documents the HTTP API used by the Phase 3C Next.js client. The base path is
+`/api/v1`. In development, Swagger
 is available at `/docs`; it is disabled in production. All IDs are UUIDs and
 dates are ISO 8601 strings. Monetary `*Minor` fields are decimal **strings**
 of kobo, never JavaScript numbers or floating-point currency values.
@@ -18,6 +18,21 @@ PUT/DELETE requests, including refresh and logout. Refresh rotates the token;
 replace the client's in-memory value. Do not put it in a URL or persistent
 browser storage. Browser writes must originate from the exact configured
 `AUTH_ALLOWED_ORIGIN`; CORS permits credentials only for configured origins.
+When the access cookie has expired but the refresh cookie is still active,
+`GET /auth/refresh-csrf` returns `{ "csrfToken": "..." }` so a same-origin BFF
+can perform a CSRF-protected refresh. It does not rotate or extend the session.
+
+The Next.js app uses a same-origin, auth-only BFF under `/api/auth/*`. Configure
+its server-only `API_BASE_URL` (default `http://localhost:3000/api/v1`) and
+serve it on port 3001 in development. The BFF validates browser `Origin` on
+every write, forwards only named auth operations and the two expected host-only
+HTTP-only cookies, gets a fresh CSRF token server-to-server for refresh/logout,
+and copies validated `Set-Cookie` headers onto its own response. Never put
+`API_BASE_URL` or signing/session secrets in a `NEXT_PUBLIC_` variable. In
+production the web origin must be HTTPS so the backend's `Secure`/`__Host-`
+cookies retain their attributes. Route protection checks `/auth/me` on the
+server; a 401 with a refresh cookie leads to a one-shot renewal page. Browser
+query caches hold only the public profile in memory and are cleared on logout.
 
 | Route | Request | Success | Notes |
 | --- | --- | --- | --- |
@@ -25,6 +40,7 @@ browser storage. Browser writes must originate from the exact configured
 | `POST /auth/login` | `{email,password}` | 200, profile plus cookies and CSRF response header | Generic 401 for unknown, wrong-password, or suspended accounts. |
 | `GET /auth/me` | Access cookie | 200, profile | 401 if expired/revoked/suspended. |
 | `GET /auth/csrf` | Access cookie | 200, `{csrfToken}` | For reloads while a session is still valid. |
+| `GET /auth/refresh-csrf` | Active, unused refresh cookie | 200, `{csrfToken}` | For BFF refresh after access expiry; 401 for missing/used/revoked/suspended session. |
 | `POST /auth/refresh` | Refresh cookie and CSRF header | 204, new cookies and CSRF response header | Reuse revokes the session; 401 on invalid token. |
 | `POST /auth/logout` | Cookies and CSRF header | 204, cleared cookies | Revokes the database session. |
 

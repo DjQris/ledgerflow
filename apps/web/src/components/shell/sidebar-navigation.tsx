@@ -2,8 +2,9 @@ import Link from 'next/link';
 import { Landmark } from 'lucide-react';
 
 import { NavLinks } from './nav-links';
+import type { UserRole } from '@/lib/auth/types';
 
-export function SidebarNavigation({ pathname }: { pathname: string }) {
+export function SidebarNavigation({ pathname, role }: { pathname: string; role: UserRole }) {
   return (
     <aside className="sticky top-0 hidden h-screen flex-col overflow-y-auto border-r border-border bg-surface-sunken px-3 py-5 lg:flex">
       <Link
@@ -16,10 +17,10 @@ export function SidebarNavigation({ pathname }: { pathname: string }) {
         LedgerFlow
       </Link>
       <nav aria-label="Primary" className="mt-9 flex-1">
-        <NavLinks pathname={pathname} />
+        <NavLinks pathname={pathname} role={role} />
       </nav>
       <p className="border-t border-border px-3 pt-4 text-xs text-muted-foreground">
-        Interface preview · no live account
+        Signed-in workspace · financial views remain previews
       </p>
     </aside>
   );

@@ -348,6 +348,34 @@ describe('Phase 2B authentication PostgreSQL HTTP integration', () => {
       .expect(401);
   });
 
+  it('issues refresh CSRF only for a live unused refresh token, even when access is expired', async () => {
+    const { address } = await register();
+    const loggedIn = await login(address);
+    await request(server()).get('/api/v1/auth/refresh-csrf').expect(401);
+    const issued = await request(server())
+      .get('/api/v1/auth/refresh-csrf')
+      .set('Cookie', refreshCookie(loggedIn))
+      .expect(200);
+    const token = (issued.body as { csrfToken: string }).csrfToken;
+    await request(server())
+      .post('/api/v1/auth/refresh')
+      .set('Cookie', refreshCookie(loggedIn))
+      .expect(403);
+    const rotated = await request(server())
+      .post('/api/v1/auth/refresh')
+      .set('Cookie', refreshCookie(loggedIn))
+      .set('X-CSRF-Token', token)
+      .expect(204);
+    await request(server())
+      .get('/api/v1/auth/refresh-csrf')
+      .set('Cookie', refreshCookie(loggedIn))
+      .expect(401);
+    await request(server())
+      .get('/api/v1/auth/refresh-csrf')
+      .set('Cookie', refreshCookie(rotated))
+      .expect(200);
+  });
+
   it('serializes concurrent refresh attempts and revokes the family on losing-token reuse', async () => {
     const { address } = await register();
     const loggedIn = await login(address);
