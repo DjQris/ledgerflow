@@ -1,0 +1,2403 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/api/v1/auth/register": {
+      "post": {
+        "operationId": "AuthController_register",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserProfileDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid email or password."
+          },
+          "403": {
+            "description": "Request origin is not allowed."
+          },
+          "409": {
+            "description": "Account already exists."
+          },
+          "429": {
+            "description": "Authentication request rate limit exceeded."
+          },
+          "503": {
+            "description": "The signing key has not been configured."
+          }
+        },
+        "summary": "Register a customer account",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "operationId": "AuthController_login",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserProfileDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid credentials."
+          },
+          "403": {
+            "description": "Request origin is not allowed."
+          },
+          "429": {
+            "description": "Authentication request rate limit exceeded."
+          },
+          "503": {
+            "description": "The signing key has not been configured."
+          }
+        },
+        "summary": "Create a session and set HTTP-only cookies",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/refresh": {
+      "post": {
+        "operationId": "AuthController_refresh",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": "Fresh HTTP-only cookies set."
+          },
+          "401": {
+            "description": "Invalid or reused refresh token."
+          },
+          "403": {
+            "description": "Request origin is not allowed."
+          },
+          "429": {
+            "description": "Authentication request rate limit exceeded."
+          },
+          "503": {
+            "description": "The signing key has not been configured."
+          }
+        },
+        "security": [
+          {
+            "csrf-token": []
+          }
+        ],
+        "summary": "Rotate a refresh token and renew access",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "operationId": "AuthController_logout",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "403": {
+            "description": "Request origin is not allowed."
+          },
+          "429": {
+            "description": "Authentication request rate limit exceeded."
+          },
+          "503": {
+            "description": "The signing key has not been configured."
+          }
+        },
+        "security": [
+          {
+            "csrf-token": []
+          }
+        ],
+        "summary": "Revoke the active session and clear cookies",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "operationId": "AuthController_me",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserProfileDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No active session."
+          },
+          "429": {
+            "description": "Authentication request rate limit exceeded."
+          },
+          "503": {
+            "description": "The signing key has not been configured."
+          }
+        },
+        "security": [
+          {
+            "access-cookie": []
+          }
+        ],
+        "summary": "Read the current authenticated customer profile",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/csrf": {
+      "get": {
+        "operationId": "AuthController_csrfToken",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "429": {
+            "description": "Authentication request rate limit exceeded."
+          },
+          "503": {
+            "description": "The signing key has not been configured."
+          }
+        },
+        "security": [
+          {
+            "access-cookie": []
+          }
+        ],
+        "summary": "Get a session-bound CSRF token",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/refresh-csrf": {
+      "get": {
+        "operationId": "AuthController_refreshCsrf",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Session-bound CSRF token."
+          },
+          "401": {
+            "description": "No active refresh session."
+          },
+          "429": {
+            "description": "Authentication request rate limit exceeded."
+          },
+          "503": {
+            "description": "The signing key has not been configured."
+          }
+        },
+        "security": [
+          {
+            "refresh-cookie": []
+          }
+        ],
+        "summary": "Get a CSRF token for an active refresh session",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/audit-events": {
+      "get": {
+        "operationId": "AuditController_list",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AuditEventResponseDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid result limit."
+          },
+          "401": {
+            "description": "An active session is required."
+          },
+          "403": {
+            "description": "Operations or admin access required."
+          }
+        },
+        "security": [
+          {
+            "access-cookie": []
+          }
+        ],
+        "summary": "Inspect recent audit events",
+        "tags": [
+          "audit"
+        ]
+      }
+    },
+    "/api/v1/audit-events/search": {
+      "get": {
+        "operationId": "AuditController_search",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000,
+              "default": 1,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
+            "name": "entityType",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
+            "name": "outcome",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "SUCCEEDED",
+                "REJECTED"
+              ]
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "2026-10-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "2026-10-31",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditEventPageDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid audit search or pagination query."
+          },
+          "401": {
+            "description": "An active session is required."
+          },
+          "403": {
+            "description": "Operations or admin access required."
+          }
+        },
+        "security": [
+          {
+            "access-cookie": []
+          }
+        ],
+        "summary": "Search and paginate safe audit context",
+        "tags": [
+          "audit"
+        ]
+      }
+    },
+    "/api/v1/admin/users": {
+      "get": {
+        "operationId": "AdminUsersController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UserProfileDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "An active session is required."
+          },
+          "403": {
+            "description": "Administrator permission required."
+          },
+          "429": {
+            "description": "Administrator request rate limit exceeded."
+          }
+        },
+        "security": [
+          {
+            "access-cookie": []
+          }
+        ],
+        "summary": "List the most recent 100 users",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/users/search": {
+      "get": {
+        "operationId": "AdminUsersController_search",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000,
+              "default": 1,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
+            "name": "role",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "CUSTOMER",
+                "OPERATIONS",
+                "ADMIN"
+              ]
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ACTIVE",
+                "SUSPENDED"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUserPageDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "An active session is required."
+          },
+          "403": {
+            "description": "Administrator permission required."
+          },
+          "429": {
+            "description": "Administrator request rate limit exceeded."
+          }
+        },
+        "security": [
+          {
+            "access-cookie": []
+          }
+        ],
+        "summary": "Search and paginate user records",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/users/{id}": {
+      "get": {
+        "operationId": "AdminUsersController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUserRecordDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "An active session is required."
+          },
+          "403": {
+            "description": "Administrator permission required."
+          },
+          "429": {
+            "description": "Administrator request rate limit exceeded."
+          }
+        },
+        "security": [
+          {
+            "access-cookie": []
+          }
+        ],
+        "summary": "Read one user record",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/users/{id}/role": {
+      "patch": {
+        "operationId": "AdminUsersController_changeRole",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeRoleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUserRecordDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "An active session is required."
+          },
+          "403": {
+            "description": "Administrator permission required."
+          },
+          "429": {
+            "description": "Administrator request rate limit exceeded."
+          }
+        },
+        "security": [
+          {
+            "access-cookie": []
+          },
+          {
+            "csrf-token": []
+          }
+        ],
+        "summary": "Assign a permitted user role",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/admin/users/{id}/status": {
+      "patch": {
+        "operationId": "AdminUsersController_changeStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeStatusDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUserRecordDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "An active session is required."
+          },
+          "403": {
+            "description": "Administrator permission required."
+          },
+          "429": {
+            "description": "Administrator request rate limit exceeded."
+          }
+        },
+        "security": [
+          {
+            "access-cookie": []
+          },
+          {
+            "csrf-token": []
+          }
+        ],
+        "summary": "Suspend or reactivate a user",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/v1/ops/jobs/failed": {
+      "get": {
+        "operationId": "OpsJobsController_listFailed",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "retrying",
+                "dead_letter",
+                "retry_pending",
+                "resolved"
+              ]
+            }
+          },
+          {
+            "name": "source",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "dispatcher",
+                "worker"
+              ]
+            }
+          },
+          {
+            "name": "eventType",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "transfer.completed"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "An active session is required."
+          },
+          "403": {
+            "description": "Operations or admin permission required."
+          },
+          "429": {
+            "description": "Operations request rate limit exceeded."
+          }
+        },
+        "security": [
+          {
+            "access-cookie": []
+          }
+        ],
+        "summary": "Inspect filtered background job failure records",
+        "tags": [
+          "operations"
+        ]
+      }
+    },
+    "/api/v1/ops/jobs/{id}": {
+      "get": {
+        "operationId": "OpsJobsController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "An active session is required."
+          },
+          "403": {
+            "description": "Operations or admin permission required."
+          },
+          "429": {
+            "description": "Operations request rate limit exceeded."
+          }
+        },
+        "security": [
+          {
+            "access-cookie": []
+          }
+        ],
+        "summary": "Inspect one background failure record",
+        "tags": [
+          "operations"
+        ]
+      }
+    },
+    "/api/v1/ops/jobs/{id}/retry": {
+      "post": {
+        "operationId": "OpsJobsController_retry",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          },
+          "401": {
+            "description": "An active session is required."
+          },
+          "403": {
+            "description": "Operations or admin permission required."
+          },
+          "429": {
+            "description": "Operations request rate limit exceeded."
+          }
+        },
+        "security": [
+          {
+            "access-cookie": []
+          },
+          {
+            "csrf-token": []
+          }
+        ],
+        "summary": "Request an audited, idempotent background retry",
+        "tags": [
+          "operations"
+        ]
+      }
+    },
+    "/api/v1/ops/outbox": {
+      "get": {
+        "operationId": "OpsJobsController_listOutbox",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "An active session is required."
+          },
+          "403": {
+            "description": "Operations or admin permission required."
+          },
+          "429": {
+            "description": "Operations request rate limit exceeded."
+          }
+        },
+        "security": [
+          {
+            "access-cookie": []
+          }
+        ],
+        "summary": "Inspect recent outbox delivery status",
+        "tags": [
+          "operations"
+        ]
+      }
+    },
+    "/api/v1/ops/reconciliation": {
+      "get": {
+        "operationId": "LedgerIntegrityController_verify",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LedgerIntegrityReportDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "An active session is required."
+          },
+          "403": {
+            "description": "Operations or admin permission required."
+          },
+          "429": {
+            "description": "Reconciliation request rate limit exceeded."
+          }
+        },
+        "security": [
+          {
+            "access-cookie": []
+          }
+        ],
+        "summary": "Run the read-only ledger integrity verification",
+        "tags": [
+          "operations"
+        ]
+      }
+    },
+    "/api/v1/health": {
+      "get": {
+        "operationId": "HealthController_getHealth",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The API is healthy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "example": {
+                    "service": "ledgerflow-api",
+                    "status": "ok",
+                    "timestamp": "2026-10-21T12:00:00.000Z"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "Check API health",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/api/v1/health/ready": {
+      "get": {
+        "operationId": "HealthController_getReadiness",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The financial database is reachable."
+          },
+          "503": {
+            "description": "The database is unavailable."
+          }
+        },
+        "summary": "Check API database readiness",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/api/v1/wallets": {
+      "post": {
+        "operationId": "WalletsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WalletResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request body is invalid."
+          },
+          "401": {
+            "description": "An active session is required."
+          },
+          "403": {
+            "description": "The signed-in user cannot access this wallet."
+          },
+          "409": {
+            "description": "The customer already has a wallet."
+          }
+        },
+        "security": [
+          {
+            "access-cookie": []
+          },
+          {
+            "csrf-token": []
+          }
+        ],
+        "summary": "Create an NGN wallet for the signed-in customer",
+        "tags": [
+          "wallets"
+        ]
+      },
+      "get": {
+        "operationId": "WalletsController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/WalletResponseDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "An active session is required."
+          },
+          "403": {
+            "description": "The signed-in user cannot access this wallet."
+          }
+        },
+        "security": [
+          {
+            "access-cookie": []
+          }
+        ],
+        "summary": "List wallets",
+        "tags": [
+          "wallets"
+        ]
+      }
+    },
+    "/api/v1/wallets/simulated": {
+      "post": {
+        "operationId": "WalletsController_createSimulated",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWalletDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WalletResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "An active session is required."
+          },
+          "403": {
+            "description": "The signed-in user cannot access this wallet."
+          }
+        },
+        "security": [
+          {
+            "access-cookie": []
+          },
+          {
+            "csrf-token": []
+          }
+        ],
+        "summary": "Create a local-only provisional simulation wallet",
+        "tags": [
+          "wallets"
+        ]
+      }
+    },
+    "/api/v1/wallets/{id}": {
+      "get": {
+        "operationId": "WalletsController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WalletResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The wallet ID is not a UUID."
+          },
+          "401": {
+            "description": "An active session is required."
+          },
+          "403": {
+            "description": "The signed-in user cannot access this wallet."
+          },
+          "404": {
+            "description": "The wallet does not exist."
+          }
+        },
+        "security": [
+          {
+            "access-cookie": []
+          }
+        ],
+        "summary": "Get a wallet by ID",
+        "tags": [
+          "wallets"
+        ]
+      }
+    },
+    "/api/v1/wallets/{id}/transactions": {
+      "get": {
+        "operationId": "WalletsController_getTransactions",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "Filter entries created on or after this ISO date/time.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Filter entries created on or before this ISO date/time.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "direction",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "INCOMING",
+                "OUTGOING",
+                "NEUTRAL"
+              ]
+            }
+          },
+          {
+            "name": "reference",
+            "required": false,
+            "in": "query",
+            "description": "Case-insensitive substring of the transaction reference.",
+            "schema": {
+              "maxLength": 100,
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "PENDING",
+                "POSTED",
+                "VOIDED",
+                "COMPLETED",
+                "FAILED",
+                "REVERSED"
+              ]
+            }
+          },
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "desc",
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WalletTransactionHistoryDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The wallet ID or pagination query is invalid."
+          },
+          "401": {
+            "description": "An active session is required."
+          },
+          "403": {
+            "description": "The signed-in user cannot access this wallet."
+          },
+          "404": {
+            "description": "The wallet does not exist."
+          }
+        },
+        "security": [
+          {
+            "access-cookie": []
+          }
+        ],
+        "summary": "List posted transactions for a wallet",
+        "tags": [
+          "wallets"
+        ]
+      }
+    },
+    "/api/v1/transactions/{id}": {
+      "get": {
+        "operationId": "CustomerTransactionsController_getOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerTransactionDetailsDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "An active session is required."
+          },
+          "403": {
+            "description": "The signed-in user cannot access this transaction."
+          },
+          "404": {
+            "description": "The transaction does not exist or is not available to this customer."
+          }
+        },
+        "security": [
+          {
+            "access-cookie": []
+          }
+        ],
+        "summary": "Get a transaction visible to the signed-in customer",
+        "tags": [
+          "CustomerTransactions"
+        ]
+      }
+    },
+    "/api/v1/transfers": {
+      "post": {
+        "operationId": "TransfersController_create",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Stable key for one transfer request",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransferCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransferResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid key or transfer command."
+          },
+          "401": {
+            "description": "An active session is required."
+          },
+          "403": {
+            "description": "The signed-in user cannot access the source wallet."
+          },
+          "404": {
+            "description": "A wallet was not found."
+          },
+          "409": {
+            "description": "Key reused with different payload, insufficient funds, or wallet conflict."
+          },
+          "429": {
+            "description": "Transfer rate limit exceeded."
+          },
+          "500": {
+            "description": "The transfer could not be committed."
+          }
+        },
+        "security": [
+          {
+            "access-cookie": []
+          },
+          {
+            "csrf-token": []
+          }
+        ],
+        "summary": "Transfer from an owned wallet",
+        "tags": [
+          "transfers"
+        ]
+      },
+      "get": {
+        "operationId": "TransfersController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TransferInspectionDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "An active session is required."
+          },
+          "403": {
+            "description": "The signed-in user cannot access the source wallet."
+          }
+        },
+        "security": [
+          {
+            "access-cookie": []
+          }
+        ],
+        "summary": "Inspect permitted recent outgoing transfers",
+        "tags": [
+          "transfers"
+        ]
+      }
+    },
+    "/api/v1/operations/metrics": {
+      "get": {
+        "operationId": "OperationsMetricsController_get",
+        "parameters": [
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "Inclusive UTC day.",
+            "schema": {
+              "example": "2026-10-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Inclusive UTC day.",
+            "schema": {
+              "example": "2026-10-31",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationsMetricsDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "An active session is required."
+          },
+          "403": {
+            "description": "Operations or admin permission required."
+          }
+        },
+        "security": [
+          {
+            "access-cookie": []
+          }
+        ],
+        "summary": "Read aggregated operational metrics for a UTC date range",
+        "tags": [
+          "operations"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "LedgerFlow API",
+    "description": "LedgerFlow backend API documentation",
+    "version": "1.0",
+    "contact": {}
+  },
+  "tags": [
+    {
+      "name": "health",
+      "description": ""
+    },
+    {
+      "name": "wallets",
+      "description": ""
+    },
+    {
+      "name": "transfers",
+      "description": ""
+    },
+    {
+      "name": "audit",
+      "description": ""
+    },
+    {
+      "name": "operations",
+      "description": ""
+    },
+    {
+      "name": "auth",
+      "description": ""
+    }
+  ],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "access-cookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "ledgerflow_access",
+        "description": "HTTP-only access cookie (production uses __Host- prefix)"
+      },
+      "refresh-cookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "ledgerflow_refresh",
+        "description": "HTTP-only refresh cookie (production uses __Host- prefix)"
+      },
+      "csrf-token": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-CSRF-Token",
+        "description": "Session-bound token from login, refresh, or GET /auth/csrf"
+      }
+    },
+    "schemas": {
+      "RegisterDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "customer@example.com",
+            "maxLength": 254
+          },
+          "password": {
+            "type": "string",
+            "format": "password",
+            "minLength": 12,
+            "maxLength": 72
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ]
+      },
+      "UserProfileDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "CUSTOMER",
+              "OPERATIONS",
+              "ADMIN"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "SUSPENDED"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "role",
+          "status"
+        ]
+      },
+      "LoginDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "customer@example.com"
+          },
+          "password": {
+            "type": "string",
+            "format": "password"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ]
+      },
+      "Object": {
+        "type": "object",
+        "properties": {}
+      },
+      "AuditEventResponseDto": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "example": "transfer_completed"
+          },
+          "actorId": {
+            "type": "object",
+            "nullable": true,
+            "example": "test-ada"
+          },
+          "actorType": {
+            "type": "object",
+            "nullable": true,
+            "example": "simulated_owner"
+          },
+          "entityId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "entityType": {
+            "type": "string",
+            "example": "transfer"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "metadata": {
+            "type": "object",
+            "nullable": true
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "SUCCEEDED",
+              "REJECTED"
+            ]
+          }
+        },
+        "required": [
+          "action",
+          "actorId",
+          "actorType",
+          "entityId",
+          "entityType",
+          "id",
+          "metadata",
+          "occurredAt",
+          "outcome"
+        ]
+      },
+      "PaginationMetadataDto": {
+        "type": "object",
+        "properties": {
+          "page": {
+            "type": "integer",
+            "minimum": 0,
+            "example": 1
+          },
+          "pageSize": {
+            "type": "integer",
+            "minimum": 0,
+            "example": 20
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "example": 1
+          },
+          "totalPages": {
+            "type": "integer",
+            "minimum": 0,
+            "example": 1
+          }
+        },
+        "required": [
+          "page",
+          "pageSize",
+          "total",
+          "totalPages"
+        ]
+      },
+      "AuditEventPageDto": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditEventResponseDto"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/PaginationMetadataDto"
+          }
+        },
+        "required": [
+          "data",
+          "pagination"
+        ]
+      },
+      "AdminUserRecordDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "CUSTOMER",
+              "OPERATIONS",
+              "ADMIN"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "SUSPENDED"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "role",
+          "status",
+          "createdAt"
+        ]
+      },
+      "AdminUserPageDto": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminUserRecordDto"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/PaginationMetadataDto"
+          }
+        },
+        "required": [
+          "data",
+          "pagination"
+        ]
+      },
+      "ChangeRoleDto": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "CUSTOMER",
+              "OPERATIONS",
+              "ADMIN"
+            ]
+          }
+        },
+        "required": [
+          "role"
+        ]
+      },
+      "ChangeStatusDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "SUSPENDED"
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "LedgerIntegrityIssueDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "resourceType": {
+            "type": "string",
+            "enum": [
+              "journal",
+              "wallet"
+            ]
+          },
+          "resourceId": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "code",
+          "resourceType",
+          "resourceId",
+          "detail"
+        ]
+      },
+      "LedgerIntegrityReportDto": {
+        "type": "object",
+        "properties": {
+          "reportId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "accountCount": {
+            "type": "string"
+          },
+          "journalCount": {
+            "type": "string"
+          },
+          "walletCount": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LedgerIntegrityIssueDto"
+            }
+          }
+        },
+        "required": [
+          "reportId",
+          "checkedAt",
+          "accountCount",
+          "journalCount",
+          "walletCount",
+          "ok",
+          "issues"
+        ]
+      },
+      "WalletResponseDto": {
+        "type": "object",
+        "properties": {
+          "balanceMinor": {
+            "type": "string",
+            "example": "0"
+          },
+          "createdAt": {
+            "type": "string",
+            "example": "2026-10-21T17:00:00.000Z"
+          },
+          "currency": {
+            "type": "string",
+            "example": "NGN"
+          },
+          "id": {
+            "type": "string",
+            "example": "7c177354-8482-4fe5-a781-1174a9447b0e"
+          },
+          "ownerReference": {
+            "type": "string",
+            "example": "test-alice"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "FROZEN",
+              "CLOSED"
+            ],
+            "example": "ACTIVE"
+          },
+          "updatedAt": {
+            "type": "string",
+            "example": "2026-10-21T17:00:00.000Z"
+          }
+        },
+        "required": [
+          "balanceMinor",
+          "createdAt",
+          "currency",
+          "id",
+          "ownerReference",
+          "status",
+          "updatedAt"
+        ]
+      },
+      "CreateWalletDto": {
+        "type": "object",
+        "properties": {
+          "ownerReference": {
+            "type": "string",
+            "description": "Stable simulated owner identifier. Real customer information is not accepted in this phase.",
+            "example": "test-alice",
+            "maxLength": 100,
+            "pattern": "^test-[a-z0-9](?:[a-z0-9_-]*[a-z0-9])?$"
+          }
+        },
+        "required": [
+          "ownerReference"
+        ]
+      },
+      "WalletTransactionResponseDto": {
+        "type": "object",
+        "properties": {
+          "amountMinor": {
+            "type": "string",
+            "example": "500000"
+          },
+          "createdAt": {
+            "type": "string",
+            "example": "2026-10-21T17:00:00.000Z"
+          },
+          "description": {
+            "type": "object",
+            "nullable": true
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "INCOMING",
+              "OUTGOING",
+              "NEUTRAL"
+            ]
+          },
+          "externalReference": {
+            "type": "object",
+            "nullable": true
+          },
+          "id": {
+            "type": "string",
+            "example": "5ad244aa-f5f1-4560-8a5b-4a4be9684e58"
+          },
+          "counterpartyWalletId": {
+            "type": "object",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "postedAt": {
+            "type": "object",
+            "example": "2026-10-21T17:00:00.000Z",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "POSTED",
+              "VOIDED",
+              "PENDING",
+              "COMPLETED",
+              "FAILED",
+              "REVERSED"
+            ]
+          },
+          "transactionId": {
+            "type": "string",
+            "example": "7f6827f9-9a4c-435e-b9cb-1bb62ae2165a"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "OPENING_FUNDING",
+              "TRANSFER",
+              "ADJUSTMENT",
+              "REVERSAL"
+            ]
+          }
+        },
+        "required": [
+          "amountMinor",
+          "createdAt",
+          "description",
+          "direction",
+          "externalReference",
+          "id",
+          "counterpartyWalletId",
+          "postedAt",
+          "status",
+          "transactionId",
+          "type"
+        ]
+      },
+      "WalletTransactionHistoryDto": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WalletTransactionResponseDto"
+            }
+          },
+          "pagination": {
+            "$ref": "#/components/schemas/PaginationMetadataDto"
+          }
+        },
+        "required": [
+          "data",
+          "pagination"
+        ]
+      },
+      "CustomerTransactionDetailsDto": {
+        "type": "object",
+        "properties": {
+          "amountMinor": {
+            "type": "string",
+            "example": "500000"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string",
+            "example": "NGN"
+          },
+          "description": {
+            "type": "object",
+            "nullable": true
+          },
+          "destinationWalletId": {
+            "type": "object",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "externalReference": {
+            "type": "object",
+            "nullable": true
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "postedAt": {
+            "type": "object",
+            "nullable": true
+          },
+          "sourceWalletId": {
+            "type": "object",
+            "nullable": true,
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "walletId": {
+            "type": "object",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "amountMinor",
+          "createdAt",
+          "currency",
+          "description",
+          "destinationWalletId",
+          "externalReference",
+          "id",
+          "postedAt",
+          "sourceWalletId",
+          "status",
+          "type",
+          "walletId"
+        ]
+      },
+      "TransferCommand": {
+        "type": "object",
+        "properties": {
+          "destinationWalletId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "amountMinor": {
+            "type": "string",
+            "example": "1000000",
+            "description": "Positive amount in kobo"
+          },
+          "sourceWalletId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "destinationWalletId",
+          "amountMinor",
+          "sourceWalletId"
+        ]
+      },
+      "TransferResponseDto": {
+        "type": "object",
+        "properties": {
+          "amountMinor": {
+            "type": "string",
+            "example": "1000000",
+            "description": "Amount in kobo"
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "destinationBalanceMinor": {
+            "type": "string",
+            "example": "1000000"
+          },
+          "destinationWalletId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "journalId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sourceBalanceMinor": {
+            "type": "string",
+            "example": "4000000"
+          },
+          "sourceWalletId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "COMPLETED",
+              "FAILED",
+              "REVERSED"
+            ]
+          },
+          "transferId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "amountMinor",
+          "completedAt",
+          "destinationBalanceMinor",
+          "destinationWalletId",
+          "journalId",
+          "sourceBalanceMinor",
+          "sourceWalletId",
+          "status",
+          "transferId"
+        ]
+      },
+      "TransferInspectionDto": {
+        "type": "object",
+        "properties": {
+          "amountMinor": {
+            "type": "string",
+            "example": "1000000"
+          },
+          "completedAt": {
+            "type": "object",
+            "format": "date-time",
+            "nullable": true
+          },
+          "destinationWalletId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "journalId": {
+            "type": "object",
+            "format": "uuid",
+            "nullable": true
+          },
+          "sourceWalletId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "COMPLETED",
+              "FAILED",
+              "REVERSED"
+            ]
+          },
+          "transferId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "amountMinor",
+          "completedAt",
+          "destinationWalletId",
+          "journalId",
+          "sourceWalletId",
+          "status",
+          "transferId"
+        ]
+      },
+      "OperationsDailyMetricDto": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "example": "2026-10-27"
+          },
+          "completedCount": {
+            "type": "number"
+          },
+          "failedCount": {
+            "type": "number"
+          },
+          "completedMinor": {
+            "type": "string",
+            "example": "500000"
+          }
+        },
+        "required": [
+          "date",
+          "completedCount",
+          "failedCount",
+          "completedMinor"
+        ]
+      },
+      "OperationsActivityDto": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "entityType": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "actorType": {
+            "type": "object"
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "action",
+          "entityType",
+          "outcome",
+          "actorType",
+          "occurredAt"
+        ]
+      },
+      "OperationsMetricsDto": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "timeZone": {
+            "type": "string",
+            "example": "UTC"
+          },
+          "completedCount": {
+            "type": "number"
+          },
+          "completedMinor": {
+            "type": "string",
+            "example": "1250000"
+          },
+          "recordedFailedTransferCount": {
+            "type": "number"
+          },
+          "registeredUsers": {
+            "type": "number"
+          },
+          "pendingRetries": {
+            "type": "number"
+          },
+          "pendingOutboxEvents": {
+            "type": "number"
+          },
+          "daily": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperationsDailyMetricDto"
+            }
+          },
+          "recentActivity": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperationsActivityDto"
+            }
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "timeZone",
+          "completedCount",
+          "completedMinor",
+          "recordedFailedTransferCount",
+          "registeredUsers",
+          "pendingRetries",
+          "pendingOutboxEvents",
+          "daily",
+          "recentActivity"
+        ]
+      }
+    }
+  }
+}

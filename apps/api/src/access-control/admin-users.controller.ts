@@ -14,6 +14,7 @@ import {
   ApiOperation,
   ApiSecurity,
   ApiTags,
+  ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
@@ -27,12 +28,18 @@ import { PermissionPolicies } from './permission-policies';
 import { ChangeRoleDto } from './dto/change-role.dto';
 import { ChangeStatusDto } from './dto/change-status.dto';
 import { AdminUserQueryDto } from './dto/admin-user-query.dto';
-import { AdminUserPageDto, AdminUserRecordDto } from './dto/admin-user-record.dto';
+import {
+  AdminUserPageDto,
+  AdminUserRecordDto,
+} from './dto/admin-user-record.dto';
 
 @ApiTags('admin')
 @ApiCookieAuth('access-cookie')
 @ApiUnauthorizedResponse({ description: 'An active session is required.' })
 @ApiForbiddenResponse({ description: 'Administrator permission required.' })
+@ApiTooManyRequestsResponse({
+  description: 'Administrator request rate limit exceeded.',
+})
 @Controller('admin/users')
 @Throttle({ ip: { limit: 60, ttl: 60_000 } })
 @Roles(...PermissionPolicies.operationsUsersRead)
@@ -56,7 +63,9 @@ export class AdminUsersController {
   @Get(':id')
   @ApiOperation({ summary: 'Read one user record' })
   @ApiOkResponse({ type: AdminUserRecordDto })
-  get(@Param('id', new ParseUUIDPipe({ version: '4' })) id: string): Promise<AdminUserRecordDto> {
+  get(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+  ): Promise<AdminUserRecordDto> {
     return this.users.get(id);
   }
 

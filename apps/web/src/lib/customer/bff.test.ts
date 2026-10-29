@@ -136,6 +136,36 @@ describe('customer wallet BFF', () => {
     ).toBe(400);
   });
 
+  it('rejects malformed pagination and non-string minor-unit response fields', async () => {
+    mockSession.mockResolvedValue({ status: 200, profile: customer });
+    mockBackend.mockResolvedValueOnce(
+      Response.json({
+        data: [],
+        pagination: { page: 1, pageSize: '20', total: 0, totalPages: 0 },
+      }),
+    );
+    const invalidPagination = await handleCustomerTransactions(
+      new Request('http://local/api'),
+      walletId,
+    );
+    expect(invalidPagination.status).toBe(502);
+
+    mockBackend.mockResolvedValueOnce(
+      Response.json([
+        {
+          id: walletId,
+          ownerReference: 'x',
+          status: 'ACTIVE',
+          currency: 'NGN',
+          balanceMinor: 9007199254740993,
+          createdAt: '2026-10-21T17:00:00.000Z',
+          updatedAt: '2026-10-21T17:00:00.000Z',
+        },
+      ]),
+    );
+    expect((await handleCustomerWallets()).status).toBe(502);
+  });
+
   it('checks customer role and allowlists customer-safe transaction detail fields', async () => {
     mockSession.mockResolvedValue({
       status: 200,

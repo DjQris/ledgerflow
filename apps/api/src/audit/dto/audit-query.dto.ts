@@ -13,6 +13,7 @@ import {
 
 import { AuditOutcome } from '../../generated/prisma/enums';
 import { AuditEventResponseDto } from './audit-event-response.dto';
+import { PaginationMetadataDto } from '../../common/dto/pagination-metadata.dto';
 
 export class AuditQueryDto {
   @ApiPropertyOptional({ default: 50, maximum: 100, minimum: 1 })
@@ -75,11 +76,6 @@ export class AuditEventPageDto {
   @ApiProperty({ type: [AuditEventResponseDto] })
   data!: AuditEventResponseDto[];
 
-  @ApiProperty({ example: { page: 1, pageSize: 20, total: 1, totalPages: 1 } })
-  pagination!: {
-    page: number;
-    pageSize: number;
-    total: number;
-    totalPages: number;
-  };
+  @ApiProperty({ type: PaginationMetadataDto })
+  pagination!: PaginationMetadataDto;
 }

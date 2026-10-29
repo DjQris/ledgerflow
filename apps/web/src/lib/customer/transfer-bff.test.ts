@@ -195,6 +195,19 @@ describe('customer transfer BFF', () => {
     });
   });
 
+  it('treats a malformed successful transfer payload as an unknown outcome', async () => {
+    mockBackend.mockResolvedValueOnce(Response.json({ csrfToken: csrf }));
+    mockBackend.mockResolvedValueOnce(
+      Response.json({ ...result, amountMinor: 100050 }, { status: 201 }),
+    );
+    const response = await handleCustomerTransfer(post());
+    expect(response.status).toBe(502);
+    expect(await response.json()).toMatchObject({
+      code: 'TRANSFER_OUTCOME_UNKNOWN',
+      outcome: 'unknown',
+    });
+  });
+
   it('distinguishes idempotent retry conflicts and network failures as unknown outcomes', async () => {
     mockBackend.mockResolvedValueOnce(Response.json({ csrfToken: csrf }));
     mockBackend.mockResolvedValueOnce(

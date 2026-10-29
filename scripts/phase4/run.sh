@@ -123,6 +123,101 @@ run_browser_smoke() {
   wait "$server_pid" 2>/dev/null || true
 }
 
+run_real_service_e2e() {
+  : > "$ARTIFACTS/status.tsv"
+  local chromium="${CHROMIUM_PATH:-/usr/bin/chromium}"
+  local web_origin='http://127.0.0.1:43101'
+  local api_base='http://127.0.0.1:43000/api/v1'
+  local api_pid='' web_pid=''
+  if [ ! -x "$chromium" ]; then
+    record full-browser-e2e skipped 0 'Chromium is not installed at the configured executable path.'
+    node scripts/phase4/report.mjs
+    return 1
+  fi
+  if ! services_ready; then
+    local service_reason='Isolated Phase 4 PostgreSQL and Redis must be healthy; run npm run phase4:up and npm run phase4:migrate first.'
+    if ! docker info >/dev/null 2>&1; then
+      service_reason='Docker daemon is unavailable to this runner; no E2E services were started.'
+    fi
+    record full-browser-e2e skipped 0 "$service_reason"
+    node scripts/phase4/report.mjs
+    return 1
+  fi
+
+  test_env
+  export AUTH_ALLOWED_ORIGIN="$web_origin"
+  export CORS_ALLOWED_ORIGINS="$web_origin"
+  export AUTH_COOKIE_SECURE=false
+  export AUTH_ACCESS_TOKEN_TTL_SECONDS=60
+  export PORT=43000
+  export PHASE4_E2E_FIXTURES=1
+
+  run_cmd api-build npm run build --workspace @ledgerflow/api || return $?
+  (
+    cd "$ROOT"
+    node apps/api/dist/main.js
+  ) > "$ARTIFACTS/e2e-api.log" 2>&1 &
+  api_pid=$!
+  local api_ready=0
+  for ((attempt = 0; attempt < 60; attempt += 1)); do
+    if curl --silent --fail "$api_base/health/ready" >/dev/null 2>&1; then
+      api_ready=1
+      break
+    fi
+    if ! kill -0 "$api_pid" 2>/dev/null; then break; fi
+    sleep 0.5
+  done
+  if [ "$api_ready" -ne 1 ]; then
+    cat "$ARTIFACTS/e2e-api.log"
+    record full-browser-e2e failed 1 'The API did not become ready on its dedicated loopback port.'
+    kill "$api_pid" 2>/dev/null || true
+    wait "$api_pid" 2>/dev/null || true
+    node scripts/phase4/report.mjs
+    return 1
+  fi
+  record e2e-api-start passed 0
+
+  (
+    cd "$ROOT/apps/web"
+    env -u DATABASE_URL -u INTEGRATION_DATABASE_URL -u INTEGRATION_REDIS_URL \
+      -u REDIS_URL -u AUTH_SIGNING_KEY -u PHASE4_POSTGRES_PASSWORD \
+      -u LEDGERFLOW_PHASE4_TEST_RUN -u PHASE4_E2E_FIXTURES -u NODE_ENV \
+      API_BASE_URL="$api_base" \
+      node ../../node_modules/next/dist/bin/next dev --hostname 127.0.0.1 --port 43101
+  ) > "$ARTIFACTS/e2e-web.log" 2>&1 &
+  web_pid=$!
+  local web_ready=0
+  for ((attempt = 0; attempt < 120; attempt += 1)); do
+    if curl --silent --fail "$web_origin/login" >/dev/null 2>&1; then
+      web_ready=1
+      break
+    fi
+    if ! kill -0 "$web_pid" 2>/dev/null; then break; fi
+    sleep 0.5
+  done
+  local e2e_code=0
+  if [ "$web_ready" -ne 1 ]; then
+    cat "$ARTIFACTS/e2e-web.log"
+    record full-browser-e2e failed 1 'Next.js did not become ready on its dedicated loopback port.'
+    e2e_code=1
+  else
+    run_cmd full-browser-e2e env \
+      CHROMIUM_PATH="$chromium" WEB_BASE_URL="$web_origin" \
+      API_BASE_URL="$api_base" SCREENSHOT_DIR="$ARTIFACTS/e2e-failures" \
+      node scripts/phase4/e2e.mjs || e2e_code=$?
+  fi
+
+  kill "$web_pid" 2>/dev/null || true
+  wait "$web_pid" 2>/dev/null || true
+  kill "$api_pid" 2>/dev/null || true
+  wait "$api_pid" 2>/dev/null || true
+  unset DATABASE_URL INTEGRATION_DATABASE_URL INTEGRATION_REDIS_URL REDIS_URL
+  unset PHASE4_POSTGRES_PASSWORD AUTH_SIGNING_KEY LEDGERFLOW_PHASE4_TEST_RUN
+  unset PHASE4_E2E_FIXTURES AUTH_ACCESS_TOKEN_TTL_SECONDS
+  node scripts/phase4/report.mjs
+  return "$e2e_code"
+}
+
 run_baseline() {
   : > "$ARTIFACTS/status.tsv"
   for stale_report in \
@@ -279,7 +374,10 @@ case "${1:-help}" in
   baseline)
     run_baseline
     ;;
+  e2e)
+    run_real_service_e2e
+    ;;
   *)
-    printf 'Usage: bash scripts/phase4/run.sh <up|down|reset|migrate|seed|baseline>\n'
+    printf 'Usage: bash scripts/phase4/run.sh <up|down|reset|migrate|seed|baseline|e2e>\n'
     ;;
 esac

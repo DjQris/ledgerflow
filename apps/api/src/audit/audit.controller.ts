@@ -21,6 +21,7 @@ import {
 @ApiTags('audit')
 @ApiCookieAuth('access-cookie')
 @ApiUnauthorizedResponse({ description: 'An active session is required.' })
+@ApiForbiddenResponse({ description: 'Operations or admin access required.' })
 @Controller('audit-events')
 export class AuditController {
   constructor(private readonly audit: AuditService) {}
@@ -39,6 +40,9 @@ export class AuditController {
   @Roles(...PermissionPolicies.auditRead)
   @ApiOperation({ summary: 'Search and paginate safe audit context' })
   @ApiOkResponse({ type: AuditEventPageDto })
+  @ApiBadRequestResponse({
+    description: 'Invalid audit search or pagination query.',
+  })
   search(@Query() query: AuditSearchQueryDto): Promise<AuditEventPageDto> {
     return this.audit.search(query);
   }

@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 
+import { PaginationMetadataDto } from '../../common/dto/pagination-metadata.dto';
 import { serializeMinorUnits } from '../../common/money/minor-units';
 import {
   LedgerTransactionStatus,
@@ -92,20 +93,6 @@ export class WalletTransactionResponseDto {
       type: record.transaction.type,
     };
   }
-}
-
-export class PaginationMetadataDto {
-  @ApiProperty({ example: 1 })
-  page!: number;
-
-  @ApiProperty({ example: 20 })
-  pageSize!: number;
-
-  @ApiProperty({ example: 1 })
-  total!: number;
-
-  @ApiProperty({ example: 1 })
-  totalPages!: number;
 }
 
 export class WalletTransactionHistoryDto {

@@ -1,6 +1,7 @@
 import { Controller, Get, Param, ParseUUIDPipe } from '@nestjs/common';
 import {
   ApiCookieAuth,
+  ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -16,6 +17,9 @@ import { WalletsService } from './wallets.service';
 
 @ApiCookieAuth('access-cookie')
 @ApiUnauthorizedResponse({ description: 'An active session is required.' })
+@ApiForbiddenResponse({
+  description: 'The signed-in user cannot access this transaction.',
+})
 @Controller('transactions')
 export class CustomerTransactionsController {
   constructor(private readonly walletsService: WalletsService) {}

@@ -23,6 +23,7 @@ import {
   ApiServiceUnavailableResponse,
   ApiSecurity,
   ApiTags,
+  ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
@@ -46,6 +47,9 @@ import { AuthOriginGuard } from './guards/auth-origin.guard';
 import { AuthenticationGuard } from './guards/authentication.guard';
 
 @ApiTags('auth')
+@ApiTooManyRequestsResponse({
+  description: 'Authentication request rate limit exceeded.',
+})
 @ApiServiceUnavailableResponse({
   description: 'The signing key has not been configured.',
 })

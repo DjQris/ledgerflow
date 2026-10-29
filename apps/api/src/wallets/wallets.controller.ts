@@ -15,6 +15,7 @@ import {
   ApiCookieAuth,
   ApiConflictResponse,
   ApiCreatedResponse,
+  ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -38,6 +39,9 @@ import { WalletsService } from './wallets.service';
 @ApiTags('wallets')
 @ApiCookieAuth('access-cookie')
 @ApiUnauthorizedResponse({ description: 'An active session is required.' })
+@ApiForbiddenResponse({
+  description: 'The signed-in user cannot access this wallet.',
+})
 @Controller('wallets')
 export class WalletsController {
   constructor(private readonly walletsService: WalletsService) {}

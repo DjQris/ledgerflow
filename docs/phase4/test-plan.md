@@ -159,6 +159,62 @@ check. A browser listener restriction initially blocked API/Playwright tests;
 after narrowly scoped local execution access, both passed as reported above.
 Commands that cannot run are recorded as failed or skipped, never passed.
 
+## Phase 4B — API/client contracts and integrated browser journeys
+
+`apps/api/openapi.json` is generated from the actual Nest route/decorator
+metadata by `npm run phase4:openapi`; it is not a separately authored API
+schema. Generation constructs the Nest application only long enough to read
+route metadata and does not initialize it, open a database connection, or bind
+a port. `npm run phase4:contract` checks the generated versioned API operations
+against `apps/web/api-contract-map.json`, requires every actual API operation
+to be mapped exactly once (including intentionally backend-only routes), and
+checks the auth/CSRF/idempotency, pagination, money serialization, and relevant
+error response declarations. `npm run phase4:matrix` renders the human-readable
+[`api-contract-matrix.md`](api-contract-matrix.md) from that same mapping.
+
+The comparison found documentation gaps and they were repaired conservatively:
+explicit throttles now declare `429`; wallet/transaction ownership and audit
+query validation errors are declared; pagination metadata is described as
+typed non-negative integer fields rather than only an example object. Money
+DTOs continue to serialize minor units as strings. The BFF tests now also
+assert that malformed pagination, numeric (rather than string) wallet balance,
+and malformed successful transfer payloads fail closed.
+
+Full real-service journeys are implemented in
+[`scripts/phase4/e2e.mjs`](../../scripts/phase4/e2e.mjs) and launched only by
+`npm run phase4:e2e`. The runner requires the exact isolated Phase 4 PostgreSQL
+and Redis endpoints, binds API/web only to loopback ports 43000/43101, uses
+fresh random customer identities and an ephemeral operations identity, and
+generates a temporary test signing key. Guarded fixture actions use only the
+`ledgerflow_phase1f_integration_*` database; they create synthetic NGN opening
+funding and a synthetic failed-job inspection record tied to a test transfer.
+No HTTP fixture or test bypass is added to the application. Reset the isolated
+test project with `npm run phase4:reset` before/after a run when deterministic
+cleanup is needed; never substitute another database or Redis endpoint.
+
+The browser journey uses real UI registration/login, API-created wallets,
+wallet display, transfer confirmation, a controlled one-request local browser
+transport interruption followed by same-key verification, transaction
+history, and an operations account reading the generated audit event and
+synthetic failed-job record. It also checks CSRF rejection, cross-customer
+wallet/transfer denial, 60-second access-token expiry, refresh-token rotation,
+and logout. Browser network interception is limited to aborting the first
+synthetic transfer request; the retry and all other journey requests reach the
+real local services. API integration suites cover suspended users, refresh
+reuse, CSRF/origin handling, wallet ownership, and account rate limits; frontend
+unit tests cover network errors and malformed response payload handling.
+Failure screenshots and traces are only captured on test failure.
+
+Phase 4B validation so far: generated OpenAPI contains 30 operations and the
+contract check passes; API build/typecheck/lint pass; frontend auth/client test
+suite passes 103 tests across 23 files; frontend typecheck/lint pass. The full
+browser journey is not claimed as passed: the local Docker daemon is not
+accessible in this execution environment, and the earlier Phase 4 baseline
+also recorded Prisma's verified schema-engine download as HTTP 403. Therefore
+the migrations, API PostgreSQL/background integration, and this browser
+journey remain unrun until the isolated test services and Prisma engine are
+available without bypassing checks.
+
 | Priority | Issue / gate                                                                                                                                                 | Required before                                       |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- |
 | P0       | Restore trusted access to Prisma's schema-engine checksum endpoint and complete migration, seed, integration, concurrency, and ledger-verification scenarios | Any database-backed test claim                        |

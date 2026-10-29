@@ -13,6 +13,7 @@ import {
   ApiOperation,
   ApiSecurity,
   ApiTags,
+  ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
@@ -30,6 +31,9 @@ import { OpsJobsService } from './ops-jobs.service';
 @ApiUnauthorizedResponse({ description: 'An active session is required.' })
 @ApiForbiddenResponse({
   description: 'Operations or admin permission required.',
+})
+@ApiTooManyRequestsResponse({
+  description: 'Operations request rate limit exceeded.',
 })
 @Controller('ops')
 @Roles(...PermissionPolicies.backgroundOperations)

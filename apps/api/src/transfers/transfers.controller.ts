@@ -24,6 +24,7 @@ import {
   ApiOperation,
   ApiSecurity,
   ApiTags,
+  ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
@@ -77,6 +78,7 @@ export class TransfersController {
   @ApiInternalServerErrorResponse({
     description: 'The transfer could not be committed.',
   })
+  @ApiTooManyRequestsResponse({ description: 'Transfer rate limit exceeded.' })
   async create(
     @Body() command: TransferCommand,
     @Headers('idempotency-key') key: string | undefined,

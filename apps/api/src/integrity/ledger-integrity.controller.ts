@@ -5,6 +5,7 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiTags,
+  ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
@@ -21,6 +22,9 @@ import { LedgerIntegrityReportDto } from './ledger-integrity.dto';
   description: 'Operations or admin permission required.',
 })
 @Controller('ops/reconciliation')
+@ApiTooManyRequestsResponse({
+  description: 'Reconciliation request rate limit exceeded.',
+})
 @Roles(...PermissionPolicies.backgroundOperations)
 @Throttle({ ip: { limit: 10, ttl: 60_000 } })
 export class LedgerIntegrityController {

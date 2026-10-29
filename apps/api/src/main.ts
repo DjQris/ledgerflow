@@ -1,12 +1,13 @@
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { SwaggerModule } from '@nestjs/swagger';
 
 import { AppModule } from './app.module';
 import { ApiExceptionFilter } from './common/filters/api-exception.filter';
 import { configureHttpSecurity } from './common/http-security';
 import { EnvironmentVariables } from './config/environment';
+import { buildSwaggerConfig } from './swagger-config';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, { bodyParser: false });
@@ -31,49 +32,7 @@ async function bootstrap(): Promise<void> {
   app.useGlobalFilters(new ApiExceptionFilter(app.get(HttpAdapterHost)));
   app.enableShutdownHooks();
 
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('LedgerFlow API')
-    .setDescription('LedgerFlow backend API documentation')
-    .setVersion('1.0')
-    .addTag('health')
-    .addTag('wallets')
-    .addTag('transfers')
-    .addTag('audit')
-    .addTag('operations')
-    .addTag('auth')
-    .addCookieAuth(
-      'ledgerflow_access',
-      {
-        description: 'HTTP-only access cookie (production uses __Host- prefix)',
-        in: 'cookie',
-        name: 'ledgerflow_access',
-        type: 'apiKey',
-      },
-      'access-cookie',
-    )
-    .addCookieAuth(
-      'ledgerflow_refresh',
-      {
-        description:
-          'HTTP-only refresh cookie (production uses __Host- prefix)',
-        in: 'cookie',
-        name: 'ledgerflow_refresh',
-        type: 'apiKey',
-      },
-      'refresh-cookie',
-    )
-    .addApiKey(
-      {
-        type: 'apiKey',
-        in: 'header',
-        name: 'X-CSRF-Token',
-        description:
-          'Session-bound token from login, refresh, or GET /auth/csrf',
-      },
-      'csrf-token',
-    )
-    .build();
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
+  const document = SwaggerModule.createDocument(app, buildSwaggerConfig());
   if (config.get('NODE_ENV', { infer: true }) !== 'production') {
     SwaggerModule.setup('docs', app, document);
   }
