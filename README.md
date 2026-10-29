@@ -135,8 +135,6 @@ npm run typecheck
 npm run lint
 npm run format:check
 npm test
-npm run test:integration
-npm run test:concurrency
 npm run test:cov
 npm run db:validate
 npm run db:status
@@ -146,22 +144,24 @@ npm run web:lint
 npm run web:test:money
 npm run web:verify:ui
 npm run build --workspace @ledgerflow/web -- --webpack
+npm run phase4:baseline
 ```
 
 Run `npm run format` to apply Prettier formatting.
 
-Integration and concurrency tests require `INTEGRATION_DATABASE_URL` to reference a dedicated database named `ledgerflow_phase1f_integration_*` with the committed migrations applied. This historical test-database prefix is retained across later suites. The Phase 2F integration suite also requires local Redis (`npm run redis:up`) and creates persistent test jobs. The auth/authorization suite generates an ephemeral signing key in memory. Historical Phase 1 simulation HTTP tests use test-only controllers; production routes require authenticated identity. For the default local PostgreSQL container:
+Phase 4A provides a separately named, loopback-only PostgreSQL and Redis stack for integration tests. It does not reuse `compose.yaml` or the development volumes. Start this stack with:
 
 ```bash
-docker exec ledgerflow-database-1 createdb -U ledgerflow ledgerflow_phase1f_integration_local
-export INTEGRATION_DATABASE_URL='postgresql://ledgerflow:ledgerflow_dev_password@127.0.0.1:5432/ledgerflow_phase1f_integration_local?schema=public'
-DATABASE_URL="$INTEGRATION_DATABASE_URL" npm run db:migrate:deploy
-npm run test:integration
-npm run test:concurrency
-DATABASE_URL="$INTEGRATION_DATABASE_URL" npm run ledger:verify
+npm run phase4:up
+npm run phase4:migrate
+npm run phase4:seed
+npm run phase4:baseline
+npm run phase4:down
 ```
 
-The concurrency harness runs ten rounds each of identical-key requests and competing debits. Set `CONCURRENCY_ROUNDS=20 npm run test:concurrency` to run a different number between 1 and 50. The database name guard prevents tests from writing to the primary development database. These tests create disposable records; use a fresh integration database for a clean run.
+Use `npm run phase4:reset` for a clean, destructive reset of only the isolated test volume; it also starts services and applies migrations/seeds. If setup fails, it stops the Phase 4 services automatically and retains only the fresh test volume for diagnosis.
+
+`phase4:reset` removes only the uniquely named Phase 4 Compose project and its test database volume, then starts it again, applies Prisma migrations, and seeds synthetic `test-ada`/`test-tobi` wallets with balanced development journals. It does not touch the development Compose project or its volumes. Integration tests fail closed unless they receive the expected local test database on port `55432` with the generated credential, the dedicated Redis process on port `56379` when needed, `NODE_ENV=test`, and the explicit Phase 4 runner marker. API `npm test` excludes database integration suites; use the Phase 4 runner for those suites. The concurrency baseline runs ten rounds. Baseline logs and machine-readable reports are written under the ignored `artifacts/phase4/` directory. Full setup, safety guarantees, scenarios, and known issues are recorded in [the Phase 4 test plan](docs/phase4/test-plan.md).
 
 Database changes must be committed as Prisma migrations. Create a development migration with:
 

@@ -8,6 +8,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 import { AuditService } from '../audit/audit.service';
 import { EnvironmentVariables } from '../config/environment';
+import { requirePhase4IntegrationEnvironment } from '../database/integration-safety';
 import { LedgerService } from '../ledger/ledger.service';
 import { OutboxService } from '../outbox/outbox.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -35,17 +36,11 @@ describe('Phase 2F BullMQ delivery', () => {
   let workerModuleClass: (typeof import('./worker.module'))['WorkerModule'];
 
   beforeAll(async () => {
-    const databaseUrl = process.env.INTEGRATION_DATABASE_URL;
-    if (!databaseUrl) throw new Error('INTEGRATION_DATABASE_URL is required');
-    const name = new URL(databaseUrl).pathname.replace(/^\//, '');
-    if (!name.startsWith('ledgerflow_phase1f_integration_')) {
-      throw new Error(
-        'Background tests require a dedicated integration database',
-      );
-    }
+    const { databaseUrl, redisUrl } = requirePhase4IntegrationEnvironment({
+      redis: true,
+    });
     process.env.DATABASE_URL = databaseUrl;
-    process.env.REDIS_URL ??= 'redis://127.0.0.1:6379';
-    process.env.NODE_ENV = 'test';
+    process.env.REDIS_URL = redisUrl;
 
     const [{ WorkerModule }, { DispatcherModule }] = await Promise.all([
       import('./worker.module.js'),

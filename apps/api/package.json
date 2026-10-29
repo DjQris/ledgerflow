@@ -26,15 +26,15 @@
     "start:prod": "node dist/main.js",
     "start:dispatcher": "node dist/main-dispatcher.js",
     "start:worker": "node dist/main-worker.js",
-    "test": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --runInBand",
+    "test": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --runInBand --testPathIgnorePatterns=\\.integration-spec\\.ts$",
     "test:integration": "npm run test:integration:core && npm run test:integration:background",
     "test:integration:core": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --runInBand --testRegex='.*\\.integration-spec\\.ts$' --testPathIgnorePatterns='phase2[fg]\\.integration-spec\\.ts$'",
     "test:integration:background": "npm run test:integration:phase2f && npm run test:integration:phase2g",
     "test:integration:phase2f": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --runInBand --testRegex='.*\\.integration-spec\\.ts$' --runTestsByPath src/background/phase2f.integration-spec.ts",
     "test:integration:phase2g": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --runInBand --testRegex='.*\\.integration-spec\\.ts$' --runTestsByPath src/background/phase2g.integration-spec.ts",
     "test:concurrency": "CONCURRENCY_ROUNDS=${CONCURRENCY_ROUNDS:-10} node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --runInBand --testRegex='transfers\\.http\\.integration-spec\\.ts$' --testNamePattern='coordinates simultaneous|concurrent debits'",
-    "test:cov": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --coverage --runInBand",
-    "test:watch": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --watch",
+    "test:cov": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --coverage --runInBand --testPathIgnorePatterns=\\.integration-spec\\.ts$",
+    "test:watch": "node --experimental-vm-modules ../../node_modules/jest/bin/jest.js --watch --testPathIgnorePatterns=\\.integration-spec\\.ts$",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {

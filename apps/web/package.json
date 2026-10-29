@@ -9,7 +9,7 @@
     "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc --noEmit --incremental false",
     "verify:ui": "node scripts/verify-shell.mjs",
-    "test:money": "node --experimental-strip-types --test scripts/money.test.mjs",
+    "test:money": "node --experimental-strip-types --test --test-reporter=tap scripts/money.test.mjs",
     "test:auth": "vitest run"
   },
   "dependencies": {

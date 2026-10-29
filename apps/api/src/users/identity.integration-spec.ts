@@ -5,6 +5,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { AuditService } from '../audit/audit.service';
 import { EnvironmentVariables } from '../config/environment';
 import { UserRole, UserStatus } from '../generated/prisma/enums';
+import { requirePhase4IntegrationEnvironment } from '../database/integration-safety';
 import { PrismaService } from '../prisma/prisma.service';
 import { WalletsService } from '../wallets/wallets.service';
 import { UsersService, simulatedUserEmail } from './users.service';
@@ -16,14 +17,7 @@ describe('Phase 2A identity and wallet ownership PostgreSQL integration', () => 
   let wallets: WalletsService;
 
   beforeAll(async () => {
-    const databaseUrl = process.env.INTEGRATION_DATABASE_URL;
-    if (!databaseUrl) throw new Error('INTEGRATION_DATABASE_URL is required');
-    const name = new URL(databaseUrl).pathname.replace(/^\//, '');
-    if (!name.startsWith('ledgerflow_phase1f_integration_')) {
-      throw new Error(
-        'Identity tests require an isolated integration database',
-      );
-    }
+    const { databaseUrl } = requirePhase4IntegrationEnvironment();
 
     const config = {
       get: jest.fn((key: keyof EnvironmentVariables) => {

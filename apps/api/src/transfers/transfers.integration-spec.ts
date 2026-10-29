@@ -12,6 +12,7 @@ import { LedgerService } from '../ledger/ledger.service';
 import { OutboxService } from '../outbox/outbox.service';
 import { parseTransferCompletedPayload } from '../outbox/outbox-events';
 import { PrismaService } from '../prisma/prisma.service';
+import { requirePhase4IntegrationEnvironment } from '../database/integration-safety';
 import { WalletsService } from '../wallets/wallets.service';
 import { UsersService } from '../users/users.service';
 import {
@@ -35,17 +36,7 @@ describe('TransfersService PostgreSQL integration', () => {
   let wallets: WalletsService;
 
   beforeAll(async () => {
-    const databaseUrl = process.env.INTEGRATION_DATABASE_URL;
-    if (!databaseUrl) {
-      throw new Error('INTEGRATION_DATABASE_URL is required');
-    }
-
-    const databaseName = new URL(databaseUrl).pathname.replace(/^\//, '');
-    if (!databaseName.startsWith('ledgerflow_phase1f_integration_')) {
-      throw new Error(
-        'Integration tests require a dedicated ledgerflow_phase1f_integration_* database',
-      );
-    }
+    const { databaseUrl } = requirePhase4IntegrationEnvironment();
 
     const config = {
       get: jest.fn((key: keyof EnvironmentVariables) => {

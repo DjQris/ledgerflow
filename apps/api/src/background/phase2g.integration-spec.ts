@@ -18,6 +18,7 @@ import { AuditService } from '../audit/audit.service';
 import { ApiExceptionFilter } from '../common/filters/api-exception.filter';
 import { configureHttpSecurity } from '../common/http-security';
 import { EnvironmentVariables } from '../config/environment';
+import { requirePhase4IntegrationEnvironment } from '../database/integration-safety';
 import { UserRole, UserStatus } from '../generated/prisma/enums';
 import { LedgerService } from '../ledger/ledger.service';
 import { OutboxService } from '../outbox/outbox.service';
@@ -47,18 +48,11 @@ describe('Phase 2G background failure recovery', () => {
   const password = 'Correct horse battery staple 2026!';
 
   beforeAll(async () => {
-    const databaseUrl = process.env.INTEGRATION_DATABASE_URL;
-    if (
-      !databaseUrl ||
-      !new URL(databaseUrl).pathname
-        .slice(1)
-        .startsWith('ledgerflow_phase1f_integration_')
-    ) {
-      throw new Error('A dedicated integration database is required');
-    }
+    const { databaseUrl, redisUrl } = requirePhase4IntegrationEnvironment({
+      redis: true,
+    });
     process.env.DATABASE_URL = databaseUrl;
-    process.env.REDIS_URL ??= 'redis://127.0.0.1:6379';
-    process.env.NODE_ENV = 'test';
+    process.env.REDIS_URL = redisUrl;
     process.env.AUTH_SIGNING_KEY = randomBytes(48).toString('hex');
     process.env.AUTH_ALLOWED_ORIGIN = origin;
     process.env.AUTH_COOKIE_SECURE = 'false';

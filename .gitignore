@@ -4,6 +4,7 @@ node_modules/
 # Build and test output
 dist/
 coverage/
+artifacts/phase4/
 apps/web/.next/
 apps/web/out/
 apps/web/*.tsbuildinfo

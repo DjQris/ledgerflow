@@ -9,6 +9,7 @@ import request from 'supertest';
 
 import { ApiExceptionFilter } from '../common/filters/api-exception.filter';
 import { configureHttpSecurity } from '../common/http-security';
+import { requirePhase4IntegrationEnvironment } from '../database/integration-safety';
 import { UserRole, UserStatus } from '../generated/prisma/enums';
 import { LedgerService } from '../ledger/ledger.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -30,12 +31,7 @@ describe('Phase 2B authentication PostgreSQL HTTP integration', () => {
   };
 
   beforeAll(async () => {
-    const databaseUrl = process.env.INTEGRATION_DATABASE_URL;
-    if (!databaseUrl) throw new Error('INTEGRATION_DATABASE_URL is required');
-    const name = new URL(databaseUrl).pathname.replace(/^\//, '');
-    if (!name.startsWith('ledgerflow_phase1f_integration_')) {
-      throw new Error('Auth tests require an isolated integration database');
-    }
+    const { databaseUrl } = requirePhase4IntegrationEnvironment();
     process.env.DATABASE_URL = databaseUrl;
     process.env.NODE_ENV = 'test';
     process.env.AUTH_SIGNING_KEY = signingKey;

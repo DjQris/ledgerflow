@@ -26,6 +26,7 @@ import request from 'supertest';
 import { ApiExceptionFilter } from '../common/filters/api-exception.filter';
 import { Public } from '../access-control/decorators/public.decorator';
 import { EnvironmentVariables } from '../config/environment';
+import { requirePhase4IntegrationEnvironment } from '../database/integration-safety';
 import {
   AuditOutcome,
   LedgerTransactionStatus,
@@ -153,14 +154,7 @@ describe('Phase 1 audit and ledger integrity PostgreSQL integration', () => {
   const previousNodeEnv = process.env.NODE_ENV;
 
   beforeAll(async () => {
-    const databaseUrl = process.env.INTEGRATION_DATABASE_URL;
-    if (!databaseUrl) throw new Error('INTEGRATION_DATABASE_URL is required');
-    const name = new URL(databaseUrl).pathname.replace(/^\//, '');
-    if (!name.startsWith('ledgerflow_phase1f_integration_')) {
-      throw new Error(
-        'Phase 1 tests require a ledgerflow_phase1f_integration_* database',
-      );
-    }
+    const { databaseUrl } = requirePhase4IntegrationEnvironment();
     process.env.DATABASE_URL = databaseUrl;
     process.env.NODE_ENV = 'test';
 

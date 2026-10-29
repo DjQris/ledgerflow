@@ -2,6 +2,7 @@ import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
 
 import { EnvironmentVariables } from '../config/environment';
+import { requirePhase4IntegrationEnvironment } from '../database/integration-safety';
 import { PrismaService } from '../prisma/prisma.service';
 import { OutboxService } from './outbox.service';
 
@@ -11,12 +12,7 @@ describe('PostgreSQL outbox claims', () => {
   let config: ConfigService<EnvironmentVariables, true>;
 
   beforeAll(async () => {
-    const databaseUrl = process.env.INTEGRATION_DATABASE_URL;
-    if (!databaseUrl) throw new Error('INTEGRATION_DATABASE_URL is required');
-    const databaseName = new URL(databaseUrl).pathname.replace(/^\//, '');
-    if (!databaseName.startsWith('ledgerflow_phase1f_integration_')) {
-      throw new Error('Outbox tests require a dedicated integration database');
-    }
+    const { databaseUrl } = requirePhase4IntegrationEnvironment();
     config = {
       get: jest.fn((key: keyof EnvironmentVariables) =>
         key === 'DATABASE_URL' ? databaseUrl : undefined,

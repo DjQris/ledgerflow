@@ -24,6 +24,7 @@ import request from 'supertest';
 import { AuditService } from '../audit/audit.service';
 import { ApiExceptionFilter } from '../common/filters/api-exception.filter';
 import { EnvironmentVariables } from '../config/environment';
+import { requirePhase4IntegrationEnvironment } from '../database/integration-safety';
 import {
   LedgerTransactionStatus,
   LedgerTransactionType,
@@ -115,14 +116,7 @@ describe('Transfer HTTP idempotency PostgreSQL integration', () => {
   let simulationEnvironment: 'test' | 'production' = 'test';
 
   beforeAll(async () => {
-    const databaseUrl = process.env.INTEGRATION_DATABASE_URL;
-    if (!databaseUrl) throw new Error('INTEGRATION_DATABASE_URL is required');
-    const name = new URL(databaseUrl).pathname.replace(/^\//, '');
-    if (!name.startsWith('ledgerflow_phase1f_integration_')) {
-      throw new Error(
-        'The HTTP suite requires a dedicated ledgerflow_phase1f_integration_* database',
-      );
-    }
+    const { databaseUrl } = requirePhase4IntegrationEnvironment();
     config = {
       get: jest.fn((key: keyof EnvironmentVariables) => {
         if (key === 'DATABASE_URL') return databaseUrl;
